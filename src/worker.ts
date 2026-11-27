@@ -1,4 +1,4 @@
-import { countUniqueAmundiProducts, discoverAmundiPaginationLinks, extractAmundiTotal, parseAmundiRows } from "./lib/amundi-parser";
+import { buildAmundiPageUrls, countUniqueAmundiProducts, discoverAmundiPaginationLinks, extractAmundiTotal, parseAmundiRows } from "./lib/amundi-parser";
 
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
