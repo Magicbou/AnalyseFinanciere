@@ -140,7 +140,7 @@ function App() {
       setManualError("Pour saisir une VL, indique obligatoirement sa date et l'URL de sa source.");
       return;
     }
-    if (nav && !/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(navDate)) {
+    if (nav && !/^\d{2}\/\d{2}\/\d{4}$/.test(navDate)) {
       setManualError("La date de la VL doit être au format JJ/MM/AAAA.");
       return;
     }
