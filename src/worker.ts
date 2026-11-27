@@ -52,6 +52,123 @@ async function getEcbFx(): Promise<Response> {
   }, 200, { "Cache-Control": "public, max-age=900, s-maxage=1800" });
 }
 
+
+const EURONEXT_TRADES_URL = "https://marketdata.euronext.com/data-reporting-service/trades-file/download/ETFS_FUNDS/LAST_HOUR/PAR";
+
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let value = "", quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (quoted && line[i + 1] === '"') { value += '"'; i++; }
+      else quoted = !quoted;
+    } else if (char === "," && !quoted) { values.push(value); value = ""; }
+    else value += char;
+  }
+  values.push(value);
+  return values.map(item => item.trim());
+}
+
+async function extractZipText(buffer: ArrayBuffer): Promise<string> {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  // Locate the ZIP central directory so data-descriptor archives are supported too.
+  let eocd = -1;
+  for (let offset = Math.max(0, bytes.length - 65557); offset <= bytes.length - 22; offset++) {
+    if (view.getUint32(offset, true) === 0x06054b50) eocd = offset;
+  }
+  if (eocd < 0) throw new Error("Archive ZIP Euronext non reconnue");
+  const entries = view.getUint16(eocd + 10, true);
+  let cursor = view.getUint32(eocd + 16, true);
+  for (let entry = 0; entry < entries; entry++) {
+    if (view.getUint32(cursor, true) !== 0x02014b50) throw new Error("Répertoire ZIP Euronext invalide");
+    const method = view.getUint16(cursor + 10, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const localOffset = view.getUint32(cursor + 42, true);
+    const filename = new TextDecoder().decode(bytes.slice(cursor + 46, cursor + 46 + nameLength));
+    cursor += 46 + nameLength + extraLength + commentLength;
+    if (filename.endsWith("/")) continue;
+    if (view.getUint32(localOffset, true) !== 0x04034b50) throw new Error("Entrée ZIP Euronext invalide");
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+    if (method === 0) return new TextDecoder("utf-8").decode(compressed);
+    if (method === 8) {
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      return new TextDecoder("utf-8").decode(await new Response(stream).arrayBuffer());
+    }
+    throw new Error("Compression ZIP Euronext non prise en charge");
+  }
+  throw new Error("Aucun fichier CSV dans l'archive Euronext");
+}
+
+async function getEuronextTrades(request: Request): Promise<Response> {
+  const requested = (new URL(request.url).searchParams.get("isins") || "")
+    .split(",").map(value => value.trim().toUpperCase()).filter(value => /^[A-Z]{2}[A-Z0-9]{10}$/.test(value));
+  if (!requested.length) return json({ status: "invalid_request", message: "Fournir au moins un ISIN valide." }, 400);
+  if (requested.length > 100) return json({ status: "invalid_request", message: "100 ISIN maximum par requête." }, 400);
+  const retrievedAt = new Date().toISOString();
+  try {
+    const response = await fetch(EURONEXT_TRADES_URL, { headers: { Accept: "application/zip,text/csv,*/*", "User-Agent": "InvestPilot/0.3 personal research" } });
+    if (!response.ok) return json({
+      status: "source_unavailable", source: EURONEXT_TRADES_URL, retrievedAt,
+      upstreamStatus: response.status, message: "Euronext n'a pas fourni de fichier de transactions pour cette période/place. Aucun cours n'est affiché."
+    }, 502);
+    const buffer = await response.arrayBuffer();
+    const text = response.headers.get("content-type")?.includes("csv")
+      ? new TextDecoder("utf-8").decode(buffer)
+      : await extractZipText(buffer);
+    const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(line => line.trim());
+    const headerIndex = lines.findIndex(line => /MifidInstrumentID/i.test(line) && /MifidPrice/i.test(line));
+    if (headerIndex < 0) return json({ status: "unrecognized_source_format", source: EURONEXT_TRADES_URL, retrievedAt, message: "En-tête CSV Euronext non reconnu. Données rejetées." }, 502);
+    const headers = parseCsvLine(lines[headerIndex]).map(value => value.replace(/^"|"$/g, ""));
+    const index = (name: string) => headers.findIndex(value => value.toLowerCase() === name.toLowerCase());
+    const isinIndex = index("MifidInstrumentID");
+    const idTypeIndex = index("MifidInstrumentIdType");
+    const priceIndex = index("MifidPrice");
+    const currencyIndex = index("MifidCurrency");
+    const tradeTimeIndex = index("TradingDateTime");
+    const publicationIndex = index("PublicationDateTime");
+    const quantityIndex = index("MifidQuantity");
+    if ([isinIndex, priceIndex, tradeTimeIndex].some(value => value < 0)) {
+      return json({ status: "unrecognized_source_format", source: EURONEXT_TRADES_URL, retrievedAt, headers, message: "Champs essentiels absents. Données rejetées." }, 502);
+    }
+    const wanted = new Set(requested);
+    const latest = new Map<string, Record<string, string>>();
+    for (const line of lines.slice(headerIndex + 1)) {
+      const fields = parseCsvLine(line);
+      const isin = (fields[isinIndex] || "").toUpperCase();
+      if (!wanted.has(isin) || (idTypeIndex >= 0 && fields[idTypeIndex] && fields[idTypeIndex] !== "ISIN")) continue;
+      const price = Number(fields[priceIndex]);
+      const tradeTime = fields[tradeTimeIndex] || "";
+      if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(Date.parse(tradeTime))) continue;
+      const previous = latest.get(isin);
+      if (!previous || Date.parse(tradeTime) > Date.parse(previous.tradeTime)) {
+        latest.set(isin, {
+          isin, price: String(price), currency: currencyIndex >= 0 ? fields[currencyIndex] || "" : "",
+          tradeTime, publicationTime: publicationIndex >= 0 ? fields[publicationIndex] || "" : "",
+          quantity: quantityIndex >= 0 ? fields[quantityIndex] || "" : ""
+        });
+      }
+    }
+    return json({
+      status: "ok", source: EURONEXT_TRADES_URL, sourceName: "Euronext · transactions différées ETFs & Funds · Paris",
+      retrievedAt, delayPolicy: "Données différées d'au plus 15 minutes après publication initiale par Euronext ; horodatages UTC.",
+      market: "PAR", period: "LAST_HOUR", results: requested.map(isin => {
+        const trade = latest.get(isin);
+        return trade ? { ...trade, status: "trade_found" } : { isin, status: "no_trade_in_period", price: null };
+      })
+    }, 200, { "Cache-Control": "public, max-age=60, s-maxage=60" });
+  } catch (error) {
+    return json({ status: "source_unavailable", source: EURONEXT_TRADES_URL, retrievedAt, message: error instanceof Error ? error.message : "Erreur de lecture Euronext." }, 502);
+  }
+}
+
 async function getAmundiCatalog(request: Request): Promise<Response> {
   const search = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
   try {
@@ -127,10 +244,11 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       if (request.method !== "GET") return json({ status: "method_not_allowed" }, 405, { Allow: "GET" });
       if (url.pathname === "/api/health") {
-        return json({ status: "ok", service: "investpilot-api", version: "0.3.0", timestamp: new Date().toISOString() });
+        return json({ status: "ok", service: "investpilot-api", version: "0.4.0", timestamp: new Date().toISOString() });
       }
       if (url.pathname === "/api/catalog/amundi") return getAmundiCatalog(request);
       if (url.pathname === "/api/market/fx") return getEcbFx();
+      if (url.pathname === "/api/market/euronext") return getEuronextTrades(request);
       return json({ status: "not_found", path: url.pathname }, 404);
     }
     return env.ASSETS.fetch(request);
