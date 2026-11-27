@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Globe2, Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen, ChartNoAxesCombined, ChevronDown, ChevronRight, CircleAlert, Database, FileSpreadsheet, FilterX, Layers3, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Wallet } from "lucide-react";
 import type { AmundiCatalogProduct, AmundiCatalogResponse } from "./lib/catalog";
 
-type Page = "overview" | "etfs" | "portfolio" | "sources";
+type Page = "overview" | "etfs" | "assurance" | "portfolio" | "sources";
 type Filters = { currency: string; venue: string; sfdr: string; exposure: string };
 type EuronextTrade = { isin:string; status:string; price:string|null; currency?:string; tradeTime?:string; publicationTime?:string; quantity?:string };
 type EuronextResponse = { status:string; source?:string; sourceName?:string; retrievedAt?:string; delayPolicy?:string; results?:EuronextTrade[]; message?:string };
+type AssuranceContract = { slug:string; name:string; insurer:string|null; distributor:string|null; management:string|null; entryFeePct:number|null; ucManagementFeePct:number|null; euroManagementFeePct:number|null; arbitrationFeePct:number|null; supportCount:number|null; etfCount:number|null; scpiCount:number|null; minimumInitialEur:number|null; euroFund:string|null; euroRate2025Pct:number|null; euroRate2024Pct:number|null; euroRate2023Pct:number|null; feeCheckedAt:string|null; rateCheckedAt:string|null; contractSourceUrl:string|null; rateSourceUrl:string|null; detailUrl:string|null };
+type AssuranceResponse = { status:string; sourceName?:string; retrievedAt?:string; sourceLicense?:string; sourceUrls?:{fees:string;euroRates:string}; methodology?:string; rateDefinition?:string; contractCount?:number; contracts?:AssuranceContract[]; message?:string };
 const emptyFilters: Filters = { currency: "Toutes", venue: "Toutes", sfdr: "Toutes", exposure: "Toutes" };
 
 function exchangeFromTicker(ticker: string): string {
@@ -40,6 +42,10 @@ function App() {
   const [euronextError, setEuronextError] = useState<string|null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<string|null>(null);
+  const [assuranceData, setAssuranceData] = useState<AssuranceResponse|null>(null);
+  const [assuranceLoading, setAssuranceLoading] = useState(false);
+  const [assuranceError, setAssuranceError] = useState<string|null>(null);
+  const [assuranceSearch, setAssuranceSearch] = useState("");
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void loadFx(); }, []);
 
@@ -75,15 +81,26 @@ function App() {
       setCatalogError(error instanceof Error ? error.message : "Erreur inconnue lors du chargement.");
     } finally { setLoading(false); }
   };
+  const loadAssuranceVie = async () => {
+    setAssuranceLoading(true); setAssuranceError(null);
+    try {
+      const response = await fetch("/api/assurance-vie/contracts", {headers:{Accept:"application/json"}});
+      const data = await response.json() as AssuranceResponse;
+      if (!response.ok || data.status !== "ok" || !data.contracts?.length) throw new Error(data.message || "Jeux de données assurance-vie indisponibles.");
+      setAssuranceData(data);
+    } catch(error) {
+      setAssuranceError(error instanceof Error ? error.message : "Erreur de lecture des données assurance-vie.");
+    } finally { setAssuranceLoading(false); }
+  };
   const refreshAll = async () => {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await Promise.all([loadFx(), loadCatalog()]);
+      await Promise.all([loadFx(), loadCatalog(), loadAssuranceVie()]);
       setLastRefreshAt(new Date().toISOString());
     } finally { setRefreshing(false); }
   };
-  useEffect(() => { if (page === "etfs" && catalog === null && !loading && !catalogError) void loadCatalog(); }, [page]);
+  useEffect(() => { if (page === "etfs" && catalog === null && !loading && !catalogError) void loadCatalog(); if (page === "assurance" && assuranceData === null && !assuranceLoading && !assuranceError) void loadAssuranceVie(); }, [page]);
 
   const products = catalog?.products ?? [];
   const filtered = useMemo(() => products.filter(p => {
@@ -105,22 +122,23 @@ function App() {
   const nav = [
     { id: "overview" as const, label: "Vue d'ensemble", icon: ChartNoAxesCombined },
     { id: "etfs" as const, label: "Catalogue ETF", icon: Layers3 },
+    { id: "assurance" as const, label: "Assurance-vie", icon: ShieldCheck },
     { id: "portfolio" as const, label: "Portefeuille", icon: Wallet },
     { id: "sources" as const, label: "Sources & données", icon: Database },
   ];
 
   const todayLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
-  const appVersion = "0.4.1";
+  const appVersion = "0.5.0";
 
   return <main className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
       <div className="workspace-label">ESPACE PERSONNEL</div>
       <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>setPage(id)}><Icon size={18}/>{label}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.4.1 · EN CONSTRUCTION</span></div>
+      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.5.0 · EN CONSTRUCTION</span></div>
     </aside>
     <section className="main-content">
-      <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><button className="secondary-button" onClick={()=>void refreshAll()} disabled={refreshing} title="Actualiser toutes les sources disponibles"><RefreshCw size={15} className={refreshing?"spin":""}/>{refreshing?"Actualisation…":"Actualiser les données"}</button><span className="status-dot"/>{refreshing?"Synchronisation en cours":lastRefreshAt?`Actualisé à ${new Date(lastRefreshAt).toLocaleTimeString("fr-FR")}`:catalog?"Catalogue source accessible":"Sources en attente"}<span className="avatar">P</span></div></header>
+      <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="assurance"?"COMPARATEUR DE CONTRATS":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="assurance"?"Comparer les assurances-vie":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><button className="secondary-button" onClick={()=>void refreshAll()} disabled={refreshing} title="Actualiser toutes les sources disponibles"><RefreshCw size={15} className={refreshing?"spin":""}/>{refreshing?"Actualisation…":"Actualiser les données"}</button><span className="status-dot"/>{refreshing?"Synchronisation en cours":lastRefreshAt?`Actualisé à ${new Date(lastRefreshAt).toLocaleTimeString("fr-FR")}`:catalog?"Catalogue source accessible":"Sources en attente"}<span className="avatar">P</span></div></header>
 
       {page==="overview"&&<>
         <section className="intro"><div><div className="eyebrow pale">VOTRE COCKPIT D'INVESTISSEMENT</div><h2>Moins d'intuition.<br/><em>Plus de preuves.</em></h2><p>Comparer, comprendre et arbitrer à partir de données vérifiables — jamais à partir de chiffres inventés.</p></div><div className="intro-stamp"><BadgeCheck size={18}/><span>Engagement<br/><strong>zéro donnée inventée</strong></span></div></section>
@@ -166,6 +184,18 @@ function App() {
         {catalog&&<div className="catalog-footnote">{euronextError&&<p className="catalog-error">{euronextError}</p>}<p>Transactions Euronext : {euronextLoading?"actualisation…":euronextRetrievedAt?`collectées le ${new Date(euronextRetrievedAt).toLocaleString("fr-FR")}`:"non disponibles"}. Dernier échange Euronext sur la dernière heure, avec un délai de publication maximal annoncé de 15 minutes. Horodatages source UTC ; affichage en heure de Paris. Les absences de transaction ne sont jamais remplacées par une VL. <a href="https://marketdata.euronext.com/data-reporting-service/trades-file" target="_blank" rel="noreferrer">Source Euronext et conditions</a>. <button className="text-button" onClick={()=>void loadEuronext(catalog.products)} disabled={euronextLoading}>Actualiser les échanges</button></p>Source : <a href={catalog.source} target="_blank" rel="noreferrer">outil de recherche Amundi ETF</a>. Collecte : {catalog.retrievedAt?new Date(catalog.retrievedAt).toLocaleString("fr-FR"):"non connue"}. La VL est publiée par Amundi et n'est pas le cours négocié en Bourse. Les cours temps réel ne sont pas encore connectés.</div>}
       </section>}
 
+      {page==="assurance"&&<section className="catalog-page">
+        <div className="catalog-intro"><div><span className="eyebrow">ASSURANCE-VIE · DONNÉES OUVERTES</span><h2>Comparer les contrats sur leurs chiffres publiés.</h2><p>Frais contractuels, nombre de supports et taux des fonds euros. Les données manquantes restent non renseignées ; aucun score ni classement n'est inventé.</p></div><div className="catalog-count"><ShieldCheck size={19}/><span><strong>{assuranceData?.contractCount??"—"} contrats AV</strong><small>{assuranceData?.retrievedAt?new Date(assuranceData.retrievedAt).toLocaleString("fr-FR"):"Synchronisation non effectuée"}</small></span></div></div>
+        <div className="catalog-toolbar"><div className="search-field"><Search size={17}/><input aria-label="Rechercher un contrat d'assurance-vie" placeholder="Contrat, assureur ou courtier…" value={assuranceSearch} onChange={e=>setAssuranceSearch(e.target.value)}/>{assuranceSearch&&<button className="clear-search" onClick={()=>setAssuranceSearch("")} aria-label="Effacer">×</button>}</div><button className="secondary-button" onClick={()=>void loadAssuranceVie()} disabled={assuranceLoading}><RefreshCw size={15} className={assuranceLoading?"spin":""}/> Actualiser</button></div>
+        {assuranceLoading&&<div className="catalog-message"><RefreshCw className="spin" size={18}/> Chargement des fichiers publics…</div>}
+        {assuranceError&&<div className="catalog-error"><CircleAlert size={18}/><span>{assuranceError}</span><button onClick={()=>void loadAssuranceVie()}>Réessayer</button></div>}
+        {assuranceData?.contracts&&<><div className="catalog-summary"><div><strong>{assuranceData.contracts.filter(c=>[c.name,c.insurer,c.distributor].some(v=>v?.toLowerCase().includes(assuranceSearch.toLowerCase()))).length} contrats affichés</strong><span> · Assurance-vie uniquement, PER exclus</span></div><span className="data-status verified"><i/>Sources ouvertes</span></div>
+          <div className="catalog-table-wrap insurance-table"><div className="insurance-table-head"><span>CONTRAT / ASSUREUR</span><span>FRAIS VERSEMENT</span><span>GESTION UC</span><span>GESTION €</span><span>ARBITRAGE</span><span>FONDS € 2025</span><span>ETF / SUPPORTS</span><span>MINIMUM</span></div>
+          {assuranceData.contracts.filter(c=>[c.name,c.insurer,c.distributor].some(v=>v?.toLowerCase().includes(assuranceSearch.toLowerCase()))).map(c=><div className="insurance-row" key={c.slug}><span><strong>{c.name}</strong><small>{c.insurer??"Assureur non renseigné"}{c.distributor?" · "+c.distributor:""}</small></span><span>{c.entryFeePct===null?"n.c.":c.entryFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.ucManagementFeePct===null?"n.c.":c.ucManagementFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.euroManagementFeePct===null?"n.c.":c.euroManagementFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.arbitrationFeePct===null?"n.c.":c.arbitrationFeePct.toLocaleString("fr-FR")+" %"}</span><span className="nav-value">{c.euroRate2025Pct===null?"n.c.":c.euroRate2025Pct.toLocaleString("fr-FR")+" %"}<small>{c.euroFund??"Fonds non précisé"}</small></span><span>{c.etfCount===null?"n.c.":c.etfCount} ETF / {c.supportCount===null?"n.c.":c.supportCount}</span><span>{c.minimumInitialEur===null?"n.c.":c.minimumInitialEur.toLocaleString("fr-FR")+" €"}</span></div>)}
+          </div>
+          <div className="catalog-footnote"><p>Les taux fonds euros 2025 sont nets des frais de gestion du contrat et bruts des prélèvements sociaux ; ils excluent les bonus conditionnels. Ils ne constituent pas des cours boursiers. Les unités de compte n'ont pas de valeur unique par contrat : leur valeur doit être consultée support par support et par ISIN.</p><p>{assuranceData.methodology} Licence : {assuranceData.sourceLicense}. Collecte InvestPilot : {new Date(assuranceData.retrievedAt??"").toLocaleString("fr-FR")}.</p><p>Sources : <a href={assuranceData.sourceUrls?.fees} target="_blank" rel="noreferrer">frais des contrats</a> · <a href={assuranceData.sourceUrls?.euroRates} target="_blank" rel="noreferrer">taux fonds euros</a> · <a href="https://www.data.gouv.fr/" target="_blank" rel="noreferrer">data.gouv.fr</a>. Les dates de vérification des lignes et les sources des assureurs sont disponibles dans les jeux de données d'origine.</p></div>
+        </>}
+      </section>}
       {page==="portfolio"&&<section className="placeholder-page"><Wallet size={24}/><h2>Suivi du portefeuille</h2><p>Cette section sera activée avec l'import des positions et le rapprochement des ISIN.</p></section>}
       {page==="sources"&&<section className="placeholder-page"><Database size={24}/><h2>Sources & qualité des données</h2><p>Catalogue : outil de recherche officiel Amundi. Cotations temps réel : fournisseur de marché et droits de diffusion à configurer. Aucune valeur liquidative n'est assimilée à un cours boursier.</p></section>}
       <footer><span>INVESTPILOT · 2026</span><span>Les performances passées ne préjugent pas des performances futures.</span></footer>
