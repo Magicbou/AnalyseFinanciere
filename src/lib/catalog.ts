@@ -45,3 +45,21 @@ export function matchesAmundiSearch(product: AmundiCatalogProduct, query: string
   ].filter(Boolean).join(" "));
   return tokens.every(token => searchable.includes(token));
 }
+
+export type AmundiCatalogFilters = {
+  currency: string;
+  venue: string;
+  sfdr: string;
+  exposure: string;
+};
+
+export function matchesAmundiFilters(
+  product: AmundiCatalogProduct,
+  filters: AmundiCatalogFilters,
+  venue: string
+): boolean {
+  return (filters.currency === "Toutes" || product.currency === filters.currency)
+    && (filters.venue === "Toutes" || venue === filters.venue)
+    && (filters.sfdr === "Toutes" || product.sfdr === filters.sfdr)
+    && (filters.exposure === "Toutes" || product.exposure === filters.exposure);
+}
