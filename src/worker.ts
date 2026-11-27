@@ -297,8 +297,12 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           scriptSources: [...firstPage.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(match => match[1]).slice(-30),
           apiLikeReferences: [...new Set((firstPage.match(/[^"'\s<>]{0,100}(?:api|graphql|finder|product|fund|etf)[^"'\s<>]{0,160}/gi) ?? []))].slice(0, 40),
           widgetConfigReferences: [...firstPage.matchAll(/.{0,100}(?:widgetInstanceID|widgetInstanceId|widget-instance-id).{0,180}/gi)].slice(0, 30).map(match => match[0]),
+          widgetMarkup: [...firstPage.matchAll(/.{0,100}(?:etf-finder|ETF Finder|etfFinder|widget-instance|widgetInstance).{0,180}/gi)].slice(0, 40).map(match => match[0]),
           widgetScriptDiagnostics: widgetScriptDiagnostics ? {
-            ...widgetScriptDiagnostics,
+            status: (widgetScriptDiagnostics as any).status,
+            length: (widgetScriptDiagnostics as any).length,
+            apiUrlDeclarations: (widgetScriptDiagnostics as any).apiUrlDeclarations,
+            mapiPaths: (widgetScriptDiagnostics as any).mapiPaths,
             getProductsDataContext: (() => { const i = widgetScript.indexOf("getProductsData"); return i >= 0 ? widgetScript.slice(i - 1200, i + 2600) : null; })(),
             widgetConfigContext: (() => { const i = widgetScript.indexOf("getWidgetInstanceByID"); return i >= 0 ? widgetScript.slice(i - 500, i + 1200) : null; })()
           } : null,
