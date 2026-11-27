@@ -241,11 +241,12 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
       : products;
     let widgetScriptDiagnostics: Record<string, unknown> | null = null;
+    let widgetScript = "";
     if (debug) {
       try {
         const widgetUrl = "https://amundiprodcdn2.azureedge.net/widgets-assets/etf-finder/20.1.25/amundi-etf-finder.js?update=1790268547";
         const widgetResponse = await fetch(widgetUrl, { headers: { Accept: "application/javascript,*/*" } });
-        const widgetScript = widgetResponse.ok ? await widgetResponse.text() : "";
+        widgetScript = widgetResponse.ok ? await widgetResponse.text() : "";
         widgetScriptDiagnostics = {
           status: widgetResponse.status,
           length: widgetScript.length,
