@@ -295,7 +295,12 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           summaryExcerpt: (() => { const i = firstPage.indexOf("ETF_FINDER_SUMMARY"); return i >= 0 ? firstPage.slice(i, i + 1200) : firstPage.slice(0, 1200); })(),
           scriptSources: [...firstPage.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(match => match[1]).slice(-30),
           apiLikeReferences: [...new Set((firstPage.match(/[^"'\s<>]{0,100}(?:api|graphql|finder|product|fund|etf)[^"'\s<>]{0,160}/gi) ?? []))].slice(0, 40),
-          widgetScriptDiagnostics,
+          widgetConfigReferences: [...firstPage.matchAll(/.{0,100}(?:widgetInstanceID|widgetInstanceId|widget-instance-id).{0,180}/gi)].slice(0, 30).map(match => match[0]),
+          widgetScriptDiagnostics: widgetScriptDiagnostics ? {
+            ...widgetScriptDiagnostics,
+            getProductsDataContext: (() => { const i = widgetScript.indexOf("getProductsData"); return i >= 0 ? widgetScript.slice(i - 1200, i + 2600) : null; })(),
+            widgetConfigContext: (() => { const i = widgetScript.indexOf("getWidgetInstanceByID"); return i >= 0 ? widgetScript.slice(i - 500, i + 1200) : null; })()
+          } : null,
           discoveredPageUrls: pageUrls
         }
       } : {}),
