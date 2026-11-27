@@ -1,5 +1,6 @@
 name = "analysefinanciere"
 main = "src/worker.ts"
+account_id = "2f7666e4cec9f9ce6cc0d315b3161a5b"
 compatibility_date = "2026-05-03"
 workers_dev = true
 
