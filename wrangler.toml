@@ -1,6 +1,11 @@
-name = "investpilot"
+name = "analysefinanciere"
 compatibility_date = "2026-11-27"
-pages_build_output_dir = "./dist"
+
+# Application React/Vite servie par Cloudflare Workers Static Assets.
+# Le dossier dist est généré par `npm run build`.
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
 
 # Ajouter le binding D1 après création de la base dans Cloudflare :
 # [[d1_databases]]
