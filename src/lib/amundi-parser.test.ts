@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countUniqueAmundiProducts, discoverAmundiPaginationLinks, extractAmundiTotal, parseAmundiRows } from "./amundi-parser";
+import { buildAmundiPageUrls, countUniqueAmundiProducts, discoverAmundiPaginationLinks, extractAmundiTotal, parseAmundiRows } from "./amundi-parser";
 const source = "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche";
 const row = "<div>ETF_FINDER_SUMMARY</div><table><tbody><tr>" +
   "<td><a>SP5C FP</a></td><td>LYX0Q9</td><td>Amundi Core S&amp;P 500 Swap UCITS ETF Acc Code ISIN LU1135865084</td>" +
@@ -18,7 +18,7 @@ describe("Amundi public catalogue parser", () => {
       { isin: "LU1135865084" }, { isin: "lu1135865084" }, { isin: "IE000BI8OT95" }, { isin: "" }
     ])).toBe(2);
   });
-  it("only follows pagination links on the official catalogue path", () => {
+  it("builds every additional 50-row page from the official total", () => {\n    const pages = buildAmundiPageUrls(source, 654);\n    expect(pages).toHaveLength(13);\n    expect(pages[0]).toBe(source + "?page=1");\n    expect(pages[12]).toBe(source + "?page=13");\n  });\n  it("does not invent additional pages when the official total fits on one page", () => {\n    expect(buildAmundiPageUrls(source, 50)).toEqual([]);\n    expect(buildAmundiPageUrls(source, null)).toEqual([]);\n  });\n  it("only follows pagination links on the official catalogue path", () => {
     const html = '<a href="?page=1">1</a><a href="https://evil.example/?page=2">x</a><a href="/other?page=3">y</a>';
     expect(discoverAmundiPaginationLinks(html, source)).toEqual([source + "?page=1"]);
   });
