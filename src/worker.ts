@@ -238,16 +238,136 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
   }
 }
 
+
+const INSURANCE_FEES_CSV = "https://www.data.gouv.fr/api/1/datasets/r/3a1608bf-25e2-421f-bbd5-e46ae42256ab";
+const INSURANCE_EURO_CSV = "https://www.data.gouv.fr/api/1/datasets/r/d6c8853b-b38e-4aa3-a119-4cb7935429a6";
+
+function parseCsvDocument(input: string): Record<string, string>[] {
+  const source = input.replace(/^\\uFEFF/, "");
+  const firstLine = source.split(/\\r?\\n/, 1)[0] ?? "";
+  const delimiter = (() => {
+    const counts = [",", ";", "\\t"].map(separator => {
+      let quoted = false, count = 0;
+      for (let i = 0; i < firstLine.length; i++) {
+        if (firstLine[i] === '"') quoted = !quoted;
+        else if (firstLine[i] === separator && !quoted) count++;
+      }
+      return count;
+    });
+    return [",", ";", "\\t"][counts.indexOf(Math.max(...counts))];
+  })();
+  const rows: string[][] = [];
+  let row: string[] = [], field = "", quoted = false;
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (char === '"') {
+      if (quoted && source[i + 1] === '"') { field += '"'; i++; }
+      else quoted = !quoted;
+    } else if (char === delimiter && !quoted) {
+      row.push(field.trim()); field = "";
+    } else if ((char === "\\n" || char === "\\r") && !quoted) {
+      if (char === "\\r" && source[i + 1] === "\\n") i++;
+      row.push(field.trim()); field = "";
+      if (row.some(value => value.length)) rows.push(row);
+      row = [];
+    } else field += char;
+  }
+  row.push(field.trim());
+  if (row.some(value => value.length)) rows.push(row);
+  if (rows.length < 2) throw new Error("CSV assurance-vie vide ou non reconnu");
+  const headers = rows[0].map(value => value.trim().toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g, ""));
+  if (!headers.includes("slug") || !headers.includes("contrat")) throw new Error("En-têtes CSV assurance-vie non reconnus");
+  return rows.slice(1).map(values => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])));
+}
+
+function nullableNumber(value: string | undefined): number | null {
+  if (!value?.trim()) return null;
+  const parsed = Number(value.trim().replace(/\\s/g, "").replace(",", ".").replace("%", ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function assuranceVieType(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/[\\s_-]/g, "");
+  return normalized === "av" || normalized.includes("assurancevie");
+}
+
+async function getAssuranceVieContracts(): Promise<Response> {
+  const retrievedAt = new Date().toISOString();
+  try {
+    const [feesResponse, euroResponse] = await Promise.all([
+      fetch(INSURANCE_FEES_CSV, { headers: { Accept: "text/csv,*/*" } }),
+      fetch(INSURANCE_EURO_CSV, { headers: { Accept: "text/csv,*/*" } })
+    ]);
+    if (!feesResponse.ok || !euroResponse.ok) {
+      return json({ status: "source_unavailable", retrievedAt, message: "Un des jeux de données publics assurance-vie est indisponible. Aucune donnée partielle n'est affichée." }, 502);
+    }
+    const [feeRows, euroRows] = await Promise.all([
+      feesResponse.text().then(parseCsvDocument),
+      euroResponse.text().then(parseCsvDocument)
+    ]);
+    const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row]));
+    const contracts = feeRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => {
+      const euro = euroBySlug.get(row.slug) ?? {};
+      return {
+        slug: row.slug,
+        name: row.contrat || euro.contrat || row.slug,
+        insurer: row.assureur || euro.assureur || null,
+        distributor: row.courtier || euro.courtier || null,
+        management: row.gestion || euro.gestion || null,
+        entryFeePct: nullableNumber(row.frais_versement_pct),
+        ucManagementFeePct: nullableNumber(row.frais_gestion_uc_pct),
+        euroManagementFeePct: nullableNumber(row.frais_gestion_fonds_euros_pct),
+        arbitrationFeePct: nullableNumber(row.frais_arbitrage_pct),
+        supportCount: nullableNumber(row.nombre_supports),
+        etfCount: nullableNumber(row.nombre_etf),
+        scpiCount: nullableNumber(row.nombre_scpi),
+        minimumInitialEur: nullableNumber(row.versement_initial_min_eur),
+        euroFund: euro.fonds_euros || null,
+        euroRate2025Pct: nullableNumber(euro.taux_2025_pct),
+        euroRate2024Pct: nullableNumber(euro.taux_2024_pct),
+        euroRate2023Pct: nullableNumber(euro.taux_2023_pct),
+        feeCheckedAt: row.date_releve || null,
+        rateCheckedAt: euro.date_releve || null,
+        contractSourceUrl: row.url_source_principale || null,
+        rateSourceUrl: euro.url_source_principale || null,
+        detailUrl: row.url_fiche_savoirplacer || euro.url_fiche_savoirplacer || null
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    if (!contracts.length) throw new Error("Aucun contrat d'assurance-vie reconnu dans les fichiers sources");
+    return json({
+      status: "ok",
+      sourceName: "Savoir Placer · jeux de données ouverts publiés sur data.gouv.fr",
+      retrievedAt,
+      sourceLicense: "Licence Ouverte / Open Licence 2.0",
+      sourceUrls: {
+        fees: "https://www.data.gouv.fr/datasets/frais-des-contrats-dassurance-vie-et-per-contrat-par-contrat",
+        euroRates: "https://www.data.gouv.fr/datasets/taux-des-fonds-euros-des-contrats-dassurance-vie-et-per"
+      },
+      methodology: "Comparaison descriptive, sans note ni classement. Frais et taux proviennent de deux fichiers distincts et sont rapprochés par slug. Les cases vides restent nulles et ne sont jamais transformées en zéro.",
+      rateDefinition: "Taux du fonds euros nets des frais de gestion du contrat et bruts des prélèvements sociaux ; bonus conditionnels non inclus.",
+      contractCount: contracts.length,
+      contracts
+    }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
+  } catch (error) {
+    return json({
+      status: "source_unavailable",
+      retrievedAt,
+      message: error instanceof Error ? error.message : "Erreur de lecture des jeux de données assurance-vie."
+    }, 502);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
       if (request.method !== "GET") return json({ status: "method_not_allowed" }, 405, { Allow: "GET" });
       if (url.pathname === "/api/health") {
-        return json({ status: "ok", service: "investpilot-api", version: "0.4.0", timestamp: new Date().toISOString() });
+        return json({ status: "ok", service: "investpilot-api", version: "0.5.0", timestamp: new Date().toISOString() });
       }
       if (url.pathname === "/api/catalog/amundi") return getAmundiCatalog(request);
       if (url.pathname === "/api/market/fx") return getEcbFx();
+      if (url.pathname === "/api/assurance-vie/contracts") return getAssuranceVieContracts();
       if (url.pathname === "/api/market/euronext") return getEuronextTrades(request);
       return json({ status: "not_found", path: url.pathname }, 404);
     }
