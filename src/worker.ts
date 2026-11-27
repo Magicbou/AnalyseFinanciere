@@ -240,6 +240,22 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     const filtered = search
       ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
       : products;
+    let widgetScriptDiagnostics: Record<string, unknown> | null = null;
+    if (debug) {
+      try {
+        const widgetUrl = "https://amundiprodcdn2.azureedge.net/widgets-assets/etf-finder/20.1.25/amundi-etf-finder.js?update=1790268547";
+        const widgetResponse = await fetch(widgetUrl, { headers: { Accept: "application/javascript,*/*" } });
+        const widgetScript = widgetResponse.ok ? await widgetResponse.text() : "";
+        widgetScriptDiagnostics = {
+          status: widgetResponse.status,
+          length: widgetScript.length,
+          urlStrings: [...new Set(widgetScript.match(/(?:https?:)?\/\/[^"'\s]+/g) ?? [])].slice(0, 60),
+          endpointContexts: [...widgetScript.matchAll(/.{0,100}(?:api|graphql|ajax|search|endpoint|finder|products).{0,140}/gi)].slice(0, 60).map(match => match[0])
+        };
+      } catch (error) {
+        widgetScriptDiagnostics = { error: error instanceof Error ? error.message : "script fetch failed" };
+      }
+    }
 
     return json({
       status: products.length ? "ok" : "unparsed_source",
@@ -277,6 +293,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           summaryExcerpt: (() => { const i = firstPage.indexOf("ETF_FINDER_SUMMARY"); return i >= 0 ? firstPage.slice(i, i + 1200) : firstPage.slice(0, 1200); })(),
           scriptSources: [...firstPage.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(match => match[1]).slice(-30),
           apiLikeReferences: [...new Set((firstPage.match(/[^"'\s<>]{0,100}(?:api|graphql|finder|product|fund|etf)[^"'\s<>]{0,160}/gi) ?? []))].slice(0, 40),
+          widgetScriptDiagnostics,
           discoveredPageUrls: pageUrls
         }
       } : {}),
