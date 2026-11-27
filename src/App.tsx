@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Globe2, Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen, ChartNoAxesCombined, ChevronDown, ChevronRight, CircleAlert, Database, FileSpreadsheet, FilterX, Layers3, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Wallet } from "lucide-react";
-import type { AmundiCatalogProduct, AmundiCatalogResponse } from "./lib/catalog";
+import { matchesAmundiSearch, type AmundiCatalogProduct, type AmundiCatalogResponse } from "./lib/catalog";
 
 type Page = "overview" | "etfs" | "assurance" | "portfolio" | "sources";
 type Filters = { currency: string; venue: string; sfdr: string; exposure: string };
@@ -30,6 +30,13 @@ function App() {
   const [showFilters, setShowFilters] = useState(true);
   const [grouped, setGrouped] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [manualProducts, setManualProducts] = useState<AmundiCatalogProduct[]>(() => {
+    try { return JSON.parse(localStorage.getItem("investpilot.manualEtfs") || "[]") as AmundiCatalogProduct[]; }
+    catch { return []; }
+  });
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualDraft, setManualDraft] = useState({ name:"", isin:"", ticker:"", wkn:"", currency:"EUR", exposure:"", sfdr:"", ongoingCharges:"", nav:"", navDate:"", manualSource:"" });
+  const [manualError, setManualError] = useState<string|null>(null);
   const [catalog, setCatalog] = useState<AmundiCatalogResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -48,6 +55,7 @@ function App() {
   const [assuranceSearch, setAssuranceSearch] = useState("");
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void refreshAll(); }, []);
+  useEffect(() => { localStorage.setItem("investpilot.manualEtfs", JSON.stringify(manualProducts)); }, [manualProducts]);
 
   const loadEuronext = async (items: AmundiCatalogProduct[]) => {
     const isins = [...new Set(items.map(item=>item.isin).filter(Boolean))];
@@ -99,10 +107,9 @@ function App() {
   };
   useEffect(() => { if (page === "etfs" && catalog === null && !loading && !catalogError) void loadCatalog(); if (page === "assurance" && assuranceData === null && !assuranceLoading && !assuranceError) void loadAssuranceVie(); }, [page]);
 
-  const products = catalog?.products ?? [];
+  const products = [...(catalog?.products ?? []), ...manualProducts];
   const filtered = useMemo(() => products.filter(p => {
-    const haystack = [p.name,p.isin,p.ticker,p.wkn,p.exposure].join(" ").toLowerCase();
-    return (!search || haystack.includes(search.toLowerCase()))
+    return matchesAmundiSearch(p, search)
       && (filters.currency === "Toutes" || p.currency === filters.currency)
       && (filters.venue === "Toutes" || exchangeFromTicker(p.ticker) === filters.venue)
       && (filters.sfdr === "Toutes" || p.sfdr === filters.sfdr)
@@ -114,6 +121,45 @@ function App() {
   const sfdrs = unique(products.map(p=>p.sfdr));
   const exposures = unique(products.map(p=>p.exposure));
 
+  const addManualProduct = () => {
+    const isin = manualDraft.isin.trim().toUpperCase();
+    const name = manualDraft.name.trim();
+    const nav = manualDraft.nav.trim();
+    const navDate = manualDraft.navDate.trim();
+    const source = manualDraft.manualSource.trim();
+    if (!name || !/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin)) {
+      setManualError("Renseigne un nom et un ISIN valide de 12 caractères.");
+      return;
+    }
+    if (products.some(product => product.isin.toUpperCase() === isin)) {
+      setManualError("Cet ISIN existe déjà dans le catalogue ou dans tes ajouts manuels.");
+      return;
+    }
+    if (nav && (!navDate || !source)) {
+      setManualError("Pour saisir une VL, indique obligatoirement sa date et l'URL de sa source.");
+      return;
+    }
+    if (nav && (!Number.isFinite(Number(nav.replace(",", "."))) || Number(nav.replace(",", ".")) <= 0)) {
+      setManualError("La valeur liquidative doit être un nombre positif.");
+      return;
+    }
+    const product: AmundiCatalogProduct = {
+      name, isin, ticker: manualDraft.ticker.trim(), wkn: manualDraft.wkn.trim(),
+      currency: manualDraft.currency.trim().toUpperCase() || "EUR",
+      exposure: manualDraft.exposure.trim() || null, sfdr: manualDraft.sfdr.trim() || null,
+      ongoingCharges: manualDraft.ongoingCharges.trim() || null,
+      assetsUnderManagement: null, nav: nav ? nav.replace(",", ".") : null,
+      navDate: navDate || null, performanceYtd: null, performance1y: null,
+      sourceUrl: source || "Saisie manuelle", sourceType: "manual",
+      manualSource: source || null, manualAddedAt: new Date().toISOString()
+    };
+    setManualProducts(current => [...current, product]);
+    setManualDraft({ name:"", isin:"", ticker:"", wkn:"", currency:"EUR", exposure:"", sfdr:"", ongoingCharges:"", nav:"", navDate:"", manualSource:"" });
+    setManualError(null);
+    setShowManualForm(false);
+    void loadEuronext([product]);
+  };
+  const removeManualProduct = (isin: string) => setManualProducts(current => current.filter(product => product.isin !== isin));
   const resetFilters = () => { setSearch(""); setFilters(emptyFilters); };
   const hasFilters = search.length > 0 || Object.values(filters).some(v=>v!=="Toutes");
   const nav = [
@@ -150,6 +196,25 @@ function App() {
       {page==="etfs"&&<section className="catalog-page">
         <div className="catalog-intro"><div><span className="eyebrow">AMUNDI · SOURCE OFFICIELLE</span><h2>Le catalogue, lisible à votre rythme.</h2><p>Recherche et filtres sur les données publiées par Amundi. Les lignes sont regroupées par ISIN ; dépliez un produit pour voir ses cotations disponibles dans la source.</p></div><div className="catalog-count"><Layers3 size={19}/><span><strong>{catalog?.sourceTotal??"—"} produits référencés</strong><small>{catalog?.retrievedAt?new Date(catalog.retrievedAt).toLocaleString("fr-FR"):"Synchronisation non effectuée"}</small></span></div></div>
         <div className="catalog-toolbar"><div className="search-field"><Search size={17}/><input aria-label="Rechercher un ETF" placeholder="Nom, ISIN, ticker, WKN ou indice…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button className="clear-search" onClick={()=>setSearch("")} aria-label="Effacer">×</button>}</div><button className={`secondary-button ${showFilters?"selected":""}`} onClick={()=>setShowFilters(v=>!v)}><SlidersHorizontal size={16}/> Filtres <ChevronDown size={14}/></button><div className="view-switch"><button className={grouped?"chosen":""} onClick={()=>setGrouped(true)}>Par produit</button><button className={!grouped?"chosen":""} onClick={()=>setGrouped(false)}>Par cotation</button></div><button className="refresh-button" onClick={()=>void loadCatalog()} disabled={loading} title="Actualiser le catalogue"><RefreshCw size={16} className={loading?"spin":""}/></button></div>
+        <div className="manual-entry-bar"><div><strong>Un ETF manque au catalogue ?</strong><small>Ajoute-le localement sans le faire passer pour une donnée Amundi vérifiée.</small></div><button className="secondary-button" onClick={()=>setShowManualForm(value=>!value)}>{showManualForm?"Fermer":"Ajouter un ETF manuellement"}</button></div>
+        {showManualForm&&<section className="manual-entry-panel">
+          <div className="manual-entry-heading"><strong>Ajout manuel d'un ETF</strong><span>Enregistré dans ce navigateur uniquement</span></div>
+          <div className="manual-entry-grid">
+            <label>Nom du fonds *<input value={manualDraft.name} onChange={e=>setManualDraft(d=>({...d,name:e.target.value}))} placeholder="Nom exact du fonds"/></label>
+            <label>ISIN *<input value={manualDraft.isin} onChange={e=>setManualDraft(d=>({...d,isin:e.target.value.toUpperCase()}))} placeholder="LU0000000000" maxLength={12}/></label>
+            <label>Ticker / mnémonique<input value={manualDraft.ticker} onChange={e=>setManualDraft(d=>({...d,ticker:e.target.value}))} placeholder="Ex. ETF FP"/></label>
+            <label>WKN<input value={manualDraft.wkn} onChange={e=>setManualDraft(d=>({...d,wkn:e.target.value}))}/></label>
+            <label>Devise<input value={manualDraft.currency} onChange={e=>setManualDraft(d=>({...d,currency:e.target.value.toUpperCase()}))} maxLength={3}/></label>
+            <label>Indice / exposition<input value={manualDraft.exposure} onChange={e=>setManualDraft(d=>({...d,exposure:e.target.value}))} placeholder="Ex. MSCI World"/></label>
+            <label>Classification SFDR<input value={manualDraft.sfdr} onChange={e=>setManualDraft(d=>({...d,sfdr:e.target.value}))} placeholder="Article 8"/></label>
+            <label>Frais courants<input value={manualDraft.ongoingCharges} onChange={e=>setManualDraft(d=>({...d,ongoingCharges:e.target.value}))} placeholder="0,20 %"/></label>
+            <label>VL (facultative)<input value={manualDraft.nav} onChange={e=>setManualDraft(d=>({...d,nav:e.target.value}))} placeholder="Ex. 125,43"/></label>
+            <label>Date de la VL<input value={manualDraft.navDate} onChange={e=>setManualDraft(d=>({...d,navDate:e.target.value}))} placeholder="JJ/MM/AAAA"/></label>
+            <label className="manual-source-field">URL de la source (obligatoire si VL saisie)<input value={manualDraft.manualSource} onChange={e=>setManualDraft(d=>({...d,manualSource:e.target.value}))} placeholder="https://..."/></label>
+          </div>
+          {manualError&&<p className="manual-entry-error">{manualError}</p>}
+          <div className="manual-entry-actions"><span>* Champs obligatoires. Aucune VL n'est créée automatiquement.</span><button className="primary-button" onClick={addManualProduct}>Enregistrer cet ETF</button></div>
+        </section>}
         {showFilters&&<div className="filter-panel">
           <label className="filter-control"><span>Devise de la part</span><select value={filters.currency} onChange={e=>setFilters(p=>({...p,currency:e.target.value}))}><option>Toutes</option>{currencies.map(v=><option key={v}>{v}</option>)}</select></label>
           <label className="filter-control"><span>Place (déduite du ticker source)</span><select value={filters.venue} onChange={e=>setFilters(p=>({...p,venue:e.target.value}))}><option>Toutes</option>{venues.map(v=><option key={v}>{v}</option>)}</select></label>
@@ -172,9 +237,9 @@ function App() {
         {!loading&&!catalogError&&catalog&&<div className="catalog-table-wrap">
           <div className="catalog-table-head"><span>PRODUIT / COTATION</span><span>ISIN</span><span>DEVISE</span><span>FRAIS</span><span>VL AMUNDI / PART</span><span>DATE DE PUBLICATION</span><span>DERNIER ÉCHANGE Euronext</span><span>ÉTAT</span></div>
           {grouped?groups.map(group=><div className="product-group" key={group.isin}>
-            <button className="product-parent" onClick={()=>setExpanded(old=>{const next=new Set(old);next.has(group.isin)?next.delete(group.isin):next.add(group.isin);return next;})}><span className="product-name"><span className="expand-icon">{expanded.has(group.isin)?<ChevronDown size={16}/>:<ChevronRight size={16}/>}</span><span><strong>{group.product.name||"Produit sans nom"}</strong><small>{group.listings.length} cotation(s) référencée(s) · {group.product.exposure||"Exposition non renseignée"}</small></span></span><span className="mono">{group.isin}</span><span>{group.product.currency||"—"}</span><span>{group.product.ongoingCharges||"—"}</span><span className="nav-value">{group.product.nav ? `${group.product.nav} ${group.product.currency}` : "Indisponible"}</span><span className="nav-date">{group.product.navDate ? `VL du ${group.product.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[group.isin]?.status==="trade_found" ? `${euronextTrades[group.isin].price} ${euronextTrades[group.isin].currency||group.product.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[group.isin]?.tradeTime?new Date(euronextTrades[group.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="source-tag">SOURCE AMUNDI</span></button>
-            {expanded.has(group.isin)&&<div className="listing-detail">{group.listings.map((item,i)=><div className="listing-row" key={item.ticker+"-"+i}><span><strong>{item.ticker}</strong><small>{exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="source-tag">VL, pas un cours live</span></div>)}</div>}
-          </div>):filtered.map((item,i)=><div className="listing-row standalone" key={item.isin+"-"+item.ticker+"-"+i}><span><strong>{item.name}</strong><small>{item.ticker} · {exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="source-tag">SOURCE AMUNDI</span></div>)}
+            <button className="product-parent" onClick={()=>setExpanded(old=>{const next=new Set(old);next.has(group.isin)?next.delete(group.isin):next.add(group.isin);return next;})}><span className="product-name"><span className="expand-icon">{expanded.has(group.isin)?<ChevronDown size={16}/>:<ChevronRight size={16}/>}</span><span><strong>{group.product.name||"Produit sans nom"}</strong><small>{group.listings.length} cotation(s) référencée(s) · {group.product.exposure||"Exposition non renseignée"}</small></span></span><span className="mono">{group.isin}</span><span>{group.product.currency||"—"}</span><span>{group.product.ongoingCharges||"—"}</span><span className="nav-value">{group.product.nav ? `${group.product.nav} ${group.product.currency}` : "Indisponible"}</span><span className="nav-date">{group.product.navDate ? `VL du ${group.product.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[group.isin]?.status==="trade_found" ? `${euronextTrades[group.isin].price} ${euronextTrades[group.isin].currency||group.product.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[group.isin]?.tradeTime?new Date(euronextTrades[group.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className={`source-tag ${group.product.sourceType==="manual"?"manual-source-tag":""}`}>{group.product.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span></button>
+            {expanded.has(group.isin)&&<div className="listing-detail">{group.listings.map((item,i)=><div className="listing-row" key={item.ticker+"-"+i}><span><strong>{item.ticker}</strong><small>{exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}</div>)}</div>}
+          </div>):filtered.map((item,i)=><div className="listing-row standalone" key={item.isin+"-"+item.ticker+"-"+i}><span><strong>{item.name}</strong><small>{item.ticker} · {exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}</div>)}
           {filtered.length===0&&<div className="catalog-message">Aucun produit ne correspond à ces critères.</div>}
         </div>}
         {!loading&&!catalogError&&!catalog&&<div className="catalog-message">Le catalogue officiel sera chargé à l'ouverture de cette page.</div>}
