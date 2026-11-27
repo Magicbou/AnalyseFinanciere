@@ -305,7 +305,7 @@ async function getAssuranceVieContracts(): Promise<Response> {
       feesResponse.text().then(parseCsvDocument),
       euroResponse.text().then(parseCsvDocument)
     ]);
-    const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row]));
+    const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
     const contracts = feeRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => {
       const euro = euroBySlug.get(row.slug) ?? {};
       return {
