@@ -170,9 +170,7 @@ async function getEuronextTrades(request: Request): Promise<Response> {
 }
 
 async function getAmundiCatalog(request: Request): Promise<Response> {
-  const requestUrl = new URL(request.url);
-  const search = (requestUrl.searchParams.get("q") || "").trim().toLowerCase();
-  const debug = requestUrl.searchParams.get("debug") === "1";
+  const search = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
   const headers = {
     Accept: "text/html,application/xhtml+xml",
     "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.5; +catalogue source attribution)",
@@ -240,35 +238,6 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     const filtered = search
       ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
       : products;
-    let widgetScriptDiagnostics: Record<string, unknown> | null = null;
-    let widgetConfigDiagnostics: Record<string, unknown> | null = null;
-    let widgetScript = "";
-    if (debug) {
-      try {
-        const widgetUrl = "https://amundiprodcdn2.azureedge.net/widgets-assets/etf-finder/20.1.25/amundi-etf-finder.js?update=1790268547";
-        const widgetResponse = await fetch(widgetUrl, { headers: { Accept: "application/javascript,*/*" } });
-        widgetScript = widgetResponse.ok ? await widgetResponse.text() : "";
-        const widgetId = firstPage.match(/<amundi-etf-finder[^>]*wiid=["']([^"']+)["']/i)?.[1];
-        if (widgetId) {
-          const configUrl = new URL("/mapi/WidgetAPI/getWidgetInstanceByID", AMUNDI_SOURCE);
-          configUrl.searchParams.set("widgetInstanceID", widgetId);
-          const configResponse = await fetch(configUrl.toString(), { headers: { Accept: "application/json, text/plain, */*" } });
-          const configText = await configResponse.text();
-          widgetConfigDiagnostics = { widgetId, status: configResponse.status, body: configText.slice(0, 8000) };
-        }
-        widgetScriptDiagnostics = {
-          status: widgetResponse.status,
-          length: widgetScript.length,
-          apiUrlDeclarations: [...new Set(widgetScript.match(/API_URL\s*=\s*"[^"]+"/g) ?? [])].slice(0, 100),
-          mapiPaths: [...new Set(widgetScript.match(/\/mapi\/[A-Za-z0-9_/-]+/g) ?? [])].slice(0, 100),
-          urlStrings: [...new Set(widgetScript.match(/(?:https?:)?\/\/[^"'\s]+/g) ?? [])].slice(0, 60),
-          endpointContexts: [...widgetScript.matchAll(/.{0,100}(?:API_URL=|\/mapi\/|mapi\/|etfFinder|etf-finder|finder\/|funds?\/).{0,180}/gi)].slice(-20).map(match => match[0])
-        };
-      } catch (error) {
-        widgetScriptDiagnostics = { error: error instanceof Error ? error.message : "script fetch failed" };
-      }
-    }
-
     return json({
       status: products.length ? "ok" : "unparsed_source",
       source: AMUNDI_SOURCE,
@@ -295,33 +264,6 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         completenessRule: "Complet uniquement si tous les lots attendus sont récupérés, sans page en échec, et si le nombre d'ISIN distincts égale le total officiel Amundi."
       },
       notice: "Les valeurs liquidatives Amundi sont des valeurs publiées par l'émetteur, pas des cours de marché en temps réel. Les cours de marché sont fournis séparément lorsqu'une source de cotation les publie.",
-      ...(debug ? {
-        diagnostics: {
-          htmlLength: firstPage.length,
-          summaryMarkerFound: firstPage.includes("ETF_FINDER_SUMMARY"),
-          htmlTableRowCount: (firstPage.match(/<tr\b/gi) ?? []).length,
-          title: firstPage.includes("<title") && firstPage.includes("</title>") ? firstPage.slice(firstPage.indexOf("<title"), firstPage.indexOf("</title>") + 8).replace(/<[^>]*>/g, " ").trim() : null,
-          productCountText: [...firstPage.matchAll(/.{0,100}produit.{0,100}/gi)].slice(-20).map(match => match[0]),
-          summaryExcerpt: (() => { const i = firstPage.indexOf("ETF_FINDER_SUMMARY"); return i >= 0 ? firstPage.slice(i, i + 1200) : firstPage.slice(0, 1200); })(),
-          scriptSources: [...firstPage.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(match => match[1]).slice(-30),
-          apiLikeReferences: [...new Set((firstPage.match(/[^"'\s<>]{0,100}(?:api|graphql|finder|product|fund|etf)[^"'\s<>]{0,160}/gi) ?? []))].slice(0, 40),
-          widgetConfigReferences: [...firstPage.matchAll(/.{0,100}(?:widgetInstanceID|widgetInstanceId|widget-instance-id).{0,180}/gi)].slice(0, 30).map(match => match[0]),
-          tableExcerpt: (() => { const i = firstPage.indexOf("FinderResultsSection__Datatable"); return i >= 0 ? firstPage.slice(i, i + 12000) : null; })(),
-          tickerExcerpt: (() => { const i = firstPage.indexOf("SP5C FP"); return i >= 0 ? firstPage.slice(i - 1000, i + 5000) : null; })(),
-          widgetMarkup: [...firstPage.matchAll(/.{0,100}(?:etf-finder|ETF Finder|etfFinder|widget-instance|widgetInstance).{0,180}/gi)].slice(0, 40).map(match => match[0]),
-          widgetScriptDiagnostics: widgetScriptDiagnostics ? {
-            status: (widgetScriptDiagnostics as any).status,
-            length: (widgetScriptDiagnostics as any).length,
-            apiUrlDeclarations: (widgetScriptDiagnostics as any).apiUrlDeclarations,
-            mapiPaths: (widgetScriptDiagnostics as any).mapiPaths,
-            getProductsDataContext: (() => { const i = widgetScript.indexOf("getProductsData"); return i >= 0 ? widgetScript.slice(i - 1200, i + 2600) : null; })(),
-            widgetConfigContext: (() => { const i = widgetScript.indexOf("getWidgetInstanceByID"); return i >= 0 ? widgetScript.slice(i - 500, i + 1200) : null; })(),
-            productDataCallContexts: [...widgetScript.matchAll(/getProductsData/g)].slice(0, 12).map(match => widgetScript.slice(Math.max(0, (match.index ?? 0) - 300), (match.index ?? 0) + 650))
-          } : null,
-          widgetConfigDiagnostics,
-          discoveredPageUrls: pageUrls
-        }
-      } : {}),
       products: filtered
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
   } catch {
