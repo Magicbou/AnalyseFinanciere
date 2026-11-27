@@ -20,12 +20,11 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: Smoke-test Cloudflare Pages Worker and static assets
+      - name: Smoke-test Cloudflare Worker and static assets
         shell: bash
         run: |
           test -s dist/index.html
-          test -s dist/_worker.js
-          setsid npx --yes wrangler@4 pages dev dist --ip 127.0.0.1 --port 8788 --log-level error > /tmp/investpilot-pages.log 2>&1 &
+          setsid npx --yes wrangler@4 dev --config wrangler.worker.toml --ip 127.0.0.1 --port 8788 --log-level error > /tmp/investpilot-worker.log 2>&1 &
           server_pid=$!
           trap 'kill -- -"$server_pid" 2>/dev/null || true' EXIT
           ready=0
@@ -37,7 +36,7 @@ jobs:
             sleep 2
           done
           if [ "$ready" -ne 1 ]; then
-            cat /tmp/investpilot-pages.log
+            cat /tmp/investpilot-worker.log
             exit 1
           fi
           node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("/tmp/investpilot-health.json","utf8")); if(data.status!=="ok" || data.version!=="0.5.0") { console.error(data); process.exit(1); }'
