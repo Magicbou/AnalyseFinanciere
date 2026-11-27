@@ -28,7 +28,12 @@ function App() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [catalog, setCatalog] = useState<AmundiCatalogResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [catalogError, setCatalogError] = useState<string | null>(null);\n  const [fxData, setFxData] = useState<{source:string;retrievedAt:string;observations:{currency:string;rate:number|null;observationDate:string|null;status:string}[]} | null>(null);\n  const [fxError, setFxError] = useState<string | null>(null);\n  const [fxLoading, setFxLoading] = useState(false);\n  const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };\n  useEffect(() => { void loadFx(); }, []);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [fxData, setFxData] = useState<{source:string;retrievedAt:string;observations:{currency:string;rate:number|null;observationDate:string|null;status:string}[]} | null>(null);
+  const [fxError, setFxError] = useState<string | null>(null);
+  const [fxLoading, setFxLoading] = useState(false);
+  const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
+  useEffect(() => { void loadFx(); }, []);
 
   const loadCatalog = async () => {
     setLoading(true); setCatalogError(null);
