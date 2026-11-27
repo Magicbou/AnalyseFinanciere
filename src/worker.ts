@@ -241,12 +241,21 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
       : products;
     let widgetScriptDiagnostics: Record<string, unknown> | null = null;
+    let widgetConfigDiagnostics: Record<string, unknown> | null = null;
     let widgetScript = "";
     if (debug) {
       try {
         const widgetUrl = "https://amundiprodcdn2.azureedge.net/widgets-assets/etf-finder/20.1.25/amundi-etf-finder.js?update=1790268547";
         const widgetResponse = await fetch(widgetUrl, { headers: { Accept: "application/javascript,*/*" } });
         widgetScript = widgetResponse.ok ? await widgetResponse.text() : "";
+        const widgetId = firstPage.match(/<amundi-etf-finder[^>]*wiid=["']([^"']+)["']/i)?.[1];
+        if (widgetId) {
+          const configUrl = new URL("/mapi/WidgetAPI/getWidgetInstanceByID", AMUNDI_SOURCE);
+          configUrl.searchParams.set("widgetInstanceID", widgetId);
+          const configResponse = await fetch(configUrl.toString(), { headers: { Accept: "application/json, text/plain, */*" } });
+          const configText = await configResponse.text();
+          widgetConfigDiagnostics = { widgetId, status: configResponse.status, body: configText.slice(0, 8000) };
+        }
         widgetScriptDiagnostics = {
           status: widgetResponse.status,
           length: widgetScript.length,
@@ -306,8 +315,10 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
             apiUrlDeclarations: (widgetScriptDiagnostics as any).apiUrlDeclarations,
             mapiPaths: (widgetScriptDiagnostics as any).mapiPaths,
             getProductsDataContext: (() => { const i = widgetScript.indexOf("getProductsData"); return i >= 0 ? widgetScript.slice(i - 1200, i + 2600) : null; })(),
-            widgetConfigContext: (() => { const i = widgetScript.indexOf("getWidgetInstanceByID"); return i >= 0 ? widgetScript.slice(i - 500, i + 1200) : null; })()
+            widgetConfigContext: (() => { const i = widgetScript.indexOf("getWidgetInstanceByID"); return i >= 0 ? widgetScript.slice(i - 500, i + 1200) : null; })(),
+            productDataCallContexts: [...widgetScript.matchAll(/getProductsData/g)].slice(0, 12).map(match => widgetScript.slice(Math.max(0, (match.index ?? 0) - 300), (match.index ?? 0) + 650))
           } : null,
+          widgetConfigDiagnostics,
           discoveredPageUrls: pageUrls
         }
       } : {}),
