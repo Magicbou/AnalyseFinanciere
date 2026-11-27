@@ -27,7 +27,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     const sourceTotal = extractAmundiTotal(firstPage);
     const productCount = countUniqueAmundiProducts(products);
     const filtered = search
-      ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value.toLowerCase().includes(search)))
+      ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
       : products;
     return json({
       status: products.length ? "ok" : "unparsed_source",
