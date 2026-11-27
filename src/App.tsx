@@ -47,7 +47,7 @@ function App() {
   const [assuranceError, setAssuranceError] = useState<string|null>(null);
   const [assuranceSearch, setAssuranceSearch] = useState("");
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
-  useEffect(() => { void loadFx(); }, []);
+  useEffect(() => { void refreshAll(); }, []);
 
   const loadEuronext = async (items: AmundiCatalogProduct[]) => {
     const isins = [...new Set(items.map(item=>item.isin).filter(Boolean))];
@@ -55,14 +55,11 @@ function App() {
     setEuronextLoading(true); setEuronextError(null);
     const collected: Record<string,EuronextTrade> = {};
     try {
-      for (let offset=0; offset<isins.length; offset+=100) {
-        const batch=isins.slice(offset,offset+100);
-        const response=await fetch("/api/market/euronext?isins="+encodeURIComponent(batch.join(",")),{headers:{Accept:"application/json"}});
-        const data=await response.json() as EuronextResponse;
-        if (!response.ok || data.status!=="ok") throw new Error(data.message||"Flux Euronext indisponible.");
-        for (const trade of data.results??[]) collected[trade.isin]=trade;
-        setEuronextRetrievedAt(data.retrievedAt??null);
-      }
+      const response=await fetch("/api/market/euronext?isins="+encodeURIComponent(isins.join(",")),{headers:{Accept:"application/json"}});
+      const data=await response.json() as EuronextResponse;
+      if (!response.ok || data.status!=="ok") throw new Error(data.message||"Flux Euronext indisponible.");
+      for (const trade of data.results??[]) collected[trade.isin]=trade;
+      setEuronextRetrievedAt(data.retrievedAt??null);
       setEuronextTrades(collected);
     } catch(error) {
       setEuronextError(error instanceof Error?error.message:"Erreur de lecture Euronext.");
