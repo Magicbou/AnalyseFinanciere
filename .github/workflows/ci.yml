@@ -25,9 +25,9 @@ jobs:
         run: |
           test -s dist/index.html
           test -s dist/_worker.js
-          npx --yes wrangler@4 pages dev dist --ip 127.0.0.1 --port 8788 --log-level error > /tmp/investpilot-pages.log 2>&1 &
+          setsid npx --yes wrangler@4 pages dev dist --ip 127.0.0.1 --port 8788 --log-level error > /tmp/investpilot-pages.log 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          trap 'kill -- -"$server_pid" 2>/dev/null || true' EXIT
           ready=0
           for attempt in $(seq 1 30); do
             if curl --silent --fail http://127.0.0.1:8788/api/health > /tmp/investpilot-health.json; then
