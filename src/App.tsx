@@ -4,7 +4,7 @@ import type { AmundiCatalogProduct, AmundiCatalogResponse } from "./lib/catalog"
 
 type Page = "overview" | "etfs" | "portfolio" | "sources";
 type Filters = { currency: string; venue: string; sfdr: string; exposure: string };
-type EuronextTrade = { isin:string; status:string; price:number|null; currency?:string; tradeTime?:string; publicationTime?:string; quantity?:string };
+type EuronextTrade = { isin:string; status:string; price:string|null; currency?:string; tradeTime?:string; publicationTime?:string; quantity?:string };
 type EuronextResponse = { status:string; source?:string; sourceName?:string; retrievedAt?:string; delayPolicy?:string; results?:EuronextTrade[]; message?:string };
 const emptyFilters: Filters = { currency: "Toutes", venue: "Toutes", sfdr: "Toutes", exposure: "Toutes" };
 
