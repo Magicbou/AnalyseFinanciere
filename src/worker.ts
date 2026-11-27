@@ -272,7 +272,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           htmlLength: firstPage.length,
           summaryMarkerFound: firstPage.includes("ETF_FINDER_SUMMARY"),
           htmlTableRowCount: (firstPage.match(/<tr\\b/gi) ?? []).length,
-          title: firstPage.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1]?.replace(/<[^>]+>/g, " ").trim() ?? null,
+          title: firstPage.includes("<title") && firstPage.includes("</title>") ? firstPage.slice(firstPage.indexOf("<title"), firstPage.indexOf("</title>") + 8).replace(/<[^>]*>/g, " ").trim() : null,
           productCountText: firstPage.match(/.{0,100}produit.{0,100}/gi)?.slice(0, 5) ?? [],
           summaryExcerpt: (() => { const i = firstPage.indexOf("ETF_FINDER_SUMMARY"); return i >= 0 ? firstPage.slice(i, i + 1200) : firstPage.slice(0, 1200); })(),
           discoveredPageUrls: pageUrls
