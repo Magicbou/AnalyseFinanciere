@@ -72,6 +72,9 @@ function App() {
     { id: "sources" as const, label: "Sources & données", icon: Database },
   ];
 
+  const todayLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  const appVersion = "0.3.0";
+
   return <main className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
@@ -80,7 +83,7 @@ function App() {
       <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.3.0 · EN CONSTRUCTION</span></div>
     </aside>
     <section className="main-content">
-      <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1></div><div className="topbar-right"><span className="status-dot"/>{catalog?"Catalogue source accessible":"Sources de marché non connectées"}<span className="avatar">P</span></div></header>
+      <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><span className="status-dot"/>{catalog?"Catalogue source accessible":"Sources de marché non connectées"}<span className="avatar">P</span></div></header>
 
       {page==="overview"&&<>
         <section className="intro"><div><div className="eyebrow pale">VOTRE COCKPIT D'INVESTISSEMENT</div><h2>Moins d'intuition.<br/><em>Plus de preuves.</em></h2><p>Comparer, comprendre et arbitrer à partir de données vérifiables — jamais à partir de chiffres inventés.</p></div><div className="intro-stamp"><BadgeCheck size={18}/><span>Engagement<br/><strong>zéro donnée inventée</strong></span></div></section>
