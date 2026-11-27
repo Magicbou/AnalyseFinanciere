@@ -20,7 +20,7 @@ async function getEcbFx(): Promise<Response> {
       const response = await fetch(url, { headers: { Accept: "text/csv" } });
       if (!response.ok) return { currency, rate: null, observationDate: null, status: "source_unavailable" };
       const csv = await response.text();
-      const lines = csv.trim().split(/\\r?\\n/);
+      const lines = csv.trim().split(/\r?\n/);
       if (lines.length < 2) return { currency, rate: null, observationDate: null, status: "no_observation" };
       const headers = lines[0].split(",");
       const dateIndex = headers.indexOf("TIME_PERIOD");
@@ -31,7 +31,7 @@ async function getEcbFx(): Promise<Response> {
       const fields = row.split(",");
       const observationDate = fields[dateIndex];
       const parsed = Number(fields[valueIndex]);
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(observationDate || "") || !Number.isFinite(parsed) || parsed <= 0) {
+      if (!/^\d{4}-\\d{2}-\\d{2}$/.test(observationDate || "") || !Number.isFinite(parsed) || parsed <= 0) {
         return { currency, rate: null, observationDate: null, status: "invalid_observation" };
       }
       const ageDays = (Date.parse(retrievedAt.slice(0, 10)) - Date.parse(observationDate)) / 86400000;
