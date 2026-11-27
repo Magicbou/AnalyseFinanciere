@@ -38,6 +38,8 @@ function App() {
   const [euronextLoading, setEuronextLoading] = useState(false);
   const [euronextRetrievedAt, setEuronextRetrievedAt] = useState<string|null>(null);
   const [euronextError, setEuronextError] = useState<string|null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<string|null>(null);
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void loadFx(); }, []);
 
@@ -68,10 +70,18 @@ function App() {
       const data = await response.json() as AmundiCatalogResponse;
       if (!response.ok || data.status !== "ok") throw new Error(data.status === "unparsed_source" ? "La page Amundi a changé de format. Aucune donnée n'a été importée." : "La source Amundi est momentanément indisponible.");
       setCatalog(data);
-      void loadEuronext(data.products);
+      await loadEuronext(data.products);
     } catch (error) {
       setCatalogError(error instanceof Error ? error.message : "Erreur inconnue lors du chargement.");
     } finally { setLoading(false); }
+  };
+  const refreshAll = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([loadFx(), loadCatalog()]);
+      setLastRefreshAt(new Date().toISOString());
+    } finally { setRefreshing(false); }
   };
   useEffect(() => { if (page === "etfs" && catalog === null && !loading && !catalogError) void loadCatalog(); }, [page]);
 
@@ -100,17 +110,17 @@ function App() {
   ];
 
   const todayLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
-  const appVersion = "0.4.0";
+  const appVersion = "0.4.1";
 
   return <main className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
       <div className="workspace-label">ESPACE PERSONNEL</div>
       <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>setPage(id)}><Icon size={18}/>{label}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.4.0 · EN CONSTRUCTION</span></div>
+      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.4.1 · EN CONSTRUCTION</span></div>
     </aside>
     <section className="main-content">
-      <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><span className="status-dot"/>{catalog?"Catalogue source accessible":"Sources de marché non connectées"}<span className="avatar">P</span></div></header>
+      <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><button className="secondary-button" onClick={()=>void refreshAll()} disabled={refreshing} title="Actualiser toutes les sources disponibles"><RefreshCw size={15} className={refreshing?"spin":""}/>{refreshing?"Actualisation…":"Actualiser les données"}</button><span className="status-dot"/>{refreshing?"Synchronisation en cours":lastRefreshAt?`Actualisé à ${new Date(lastRefreshAt).toLocaleTimeString("fr-FR")}`:catalog?"Catalogue source accessible":"Sources en attente"}<span className="avatar">P</span></div></header>
 
       {page==="overview"&&<>
         <section className="intro"><div><div className="eyebrow pale">VOTRE COCKPIT D'INVESTISSEMENT</div><h2>Moins d'intuition.<br/><em>Plus de preuves.</em></h2><p>Comparer, comprendre et arbitrer à partir de données vérifiables — jamais à partir de chiffres inventés.</p></div><div className="intro-stamp"><BadgeCheck size={18}/><span>Engagement<br/><strong>zéro donnée inventée</strong></span></div></section>
