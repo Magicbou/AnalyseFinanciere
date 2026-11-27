@@ -53,3 +53,18 @@ export function discoverAmundiPaginationLinks(html: string, sourceUrl: string): 
   }
   return [...links].slice(0, 20);
 }
+
+/** Amundi currently exposes 50 result rows per page. The first page has no
+ * pager query; subsequent pages use the standard zero-based ?page= parameter. */
+export function buildAmundiPageUrls(sourceUrl: string, officialTotal: number | null, pageSize = 50): string[] {
+  if (!officialTotal || officialTotal <= pageSize || !Number.isInteger(pageSize) || pageSize < 1) return [];
+  const base = new URL(sourceUrl);
+  const pageCount = Math.ceil(officialTotal / pageSize);
+  const urls: string[] = [];
+  for (let page = 1; page < pageCount; page += 1) {
+    const url = new URL(base);
+    url.searchParams.set("page", String(page));
+    urls.push(url.toString());
+  }
+  return urls;
+}
