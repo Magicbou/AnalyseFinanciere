@@ -111,7 +111,7 @@ async function getEuronextTrades(request: Request): Promise<Response> {
   const requested = (new URL(request.url).searchParams.get("isins") || "")
     .split(",").map(value => value.trim().toUpperCase()).filter(value => /^[A-Z]{2}[A-Z0-9]{10}$/.test(value));
   if (!requested.length) return json({ status: "invalid_request", message: "Fournir au moins un ISIN valide." }, 400);
-  if (requested.length > 100) return json({ status: "invalid_request", message: "100 ISIN maximum par requête." }, 400);
+  if (requested.length > 1000) return json({ status: "invalid_request", message: "1000 ISIN maximum par requête." }, 400);
   const retrievedAt = new Date().toISOString();
   try {
     const response = await fetch(EURONEXT_TRADES_URL, { headers: { Accept: "application/zip,text/csv,*/*", "User-Agent": "InvestPilot/0.3 personal research" } });
