@@ -8,3 +8,15 @@
 
 /* Valeurs Amundi : rendre le montant par part immédiatement repérable. */
 .nav-value{font:700 13px Manrope, sans-serif;color:#243b2b;font-variant-numeric:tabular-nums;white-space:nowrap}.nav-date{font-size:10px;color:#778579;white-space:nowrap}.product-parent .nav-value,.listing-row .nav-value{display:block}.listing-row .nav-date{display:block}
+
+
+/* Contrôle de complétude du catalogue Amundi */
+.catalog-audit-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:12px 0 18px;padding:14px;border:1px solid var(--line,#e6e9e4);border-radius:12px;background:var(--surface,#fff)}
+.catalog-audit-grid>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.catalog-audit-grid small{font-size:10px;line-height:1.35;color:var(--muted,#788078)}
+.catalog-audit-grid strong{font-size:17px;font-variant-numeric:tabular-nums;color:var(--ink,#26332b)}
+.catalog-audit-grid p{grid-column:1/-1;margin:4px 0 0;font-size:11px;line-height:1.5;color:var(--muted,#788078)}
+.data-status.warning{color:#8a5a19}
+.data-status.verified{color:#2e6a46}
+@media(max-width:900px){.catalog-audit-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:520px){.catalog-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
