@@ -95,14 +95,14 @@ function App() {
   ];
 
   const todayLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
-  const appVersion = "0.3.0";
+  const appVersion = "0.4.0";
 
   return <main className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
       <div className="workspace-label">ESPACE PERSONNEL</div>
       <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>setPage(id)}><Icon size={18}/>{label}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.3.0 · EN CONSTRUCTION</span></div>
+      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.4.0 · EN CONSTRUCTION</span></div>
     </aside>
     <section className="main-content">
       <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><span className="status-dot"/>{catalog?"Catalogue source accessible":"Sources de marché non connectées"}<span className="avatar">P</span></div></header>
@@ -148,7 +148,7 @@ function App() {
           {filtered.length===0&&<div className="catalog-message">Aucun produit ne correspond à ces critères.</div>}
         </div>}
         {!loading&&!catalogError&&!catalog&&<div className="catalog-message">Le catalogue officiel sera chargé à l'ouverture de cette page.</div>}
-        {catalog&&<div className="catalog-footnote">{euronextError&&<p className="catalog-error">{euronextError}</p>}<p>Transactions Euronext : {euronextLoading?"actualisation…":euronextRetrievedAt?`collectées le ${new Date(euronextRetrievedAt).toLocaleString("fr-FR")}`:"non disponibles"}. Dernier échange sur la dernière heure uniquement ; les absences de transaction ne sont pas remplacées par une VL. <button className="text-button" onClick={()=>void loadEuronext(catalog.products)} disabled={euronextLoading}>Actualiser les échanges</button></p>Source : <a href={catalog.source} target="_blank" rel="noreferrer">outil de recherche Amundi ETF</a>. Collecte : {catalog.retrievedAt?new Date(catalog.retrievedAt).toLocaleString("fr-FR"):"non connue"}. La VL est publiée par Amundi et n'est pas le cours négocié en Bourse. Les cours temps réel ne sont pas encore connectés.</div>}
+        {catalog&&<div className="catalog-footnote">{euronextError&&<p className="catalog-error">{euronextError}</p>}<p>Transactions Euronext : {euronextLoading?"actualisation…":euronextRetrievedAt?`collectées le ${new Date(euronextRetrievedAt).toLocaleString("fr-FR")}`:"non disponibles"}. Dernier échange Euronext sur la dernière heure, avec un délai de publication maximal annoncé de 15 minutes. Horodatages source UTC ; affichage en heure de Paris. Les absences de transaction ne sont jamais remplacées par une VL. <a href="https://marketdata.euronext.com/data-reporting-service/trades-file" target="_blank" rel="noreferrer">Source Euronext et conditions</a>. <button className="text-button" onClick={()=>void loadEuronext(catalog.products)} disabled={euronextLoading}>Actualiser les échanges</button></p>Source : <a href={catalog.source} target="_blank" rel="noreferrer">outil de recherche Amundi ETF</a>. Collecte : {catalog.retrievedAt?new Date(catalog.retrievedAt).toLocaleString("fr-FR"):"non connue"}. La VL est publiée par Amundi et n'est pas le cours négocié en Bourse. Les cours temps réel ne sont pas encore connectés.</div>}
       </section>}
 
       {page==="portfolio"&&<section className="placeholder-page"><Wallet size={24}/><h2>Suivi du portefeuille</h2><p>Cette section sera activée avec l'import des positions et le rapprochement des ISIN.</p></section>}
