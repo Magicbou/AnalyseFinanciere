@@ -1,0 +1,120 @@
+import { useEffect, useMemo, useState } from "react";
+import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen, ChartNoAxesCombined, ChevronDown, ChevronRight, CircleAlert, Database, FileSpreadsheet, FilterX, Layers3, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Wallet } from "lucide-react";
+import type { AmundiCatalogProduct, AmundiCatalogResponse } from "./lib/catalog";
+
+type Page = "overview" | "etfs" | "portfolio" | "sources";
+type Filters = { currency: string; venue: string; sfdr: string; exposure: string };
+const emptyFilters: Filters = { currency: "Toutes", venue: "Toutes", sfdr: "Toutes", exposure: "Toutes" };
+
+function exchangeFromTicker(ticker: string): string {
+  const suffix = ticker.trim().split(/\s+/).pop()?.toUpperCase();
+  const map: Record<string, string> = { FP: "Euronext Paris", GY: "Xetra", LN: "London Stock Exchange", IM: "Euronext Milan", SW: "SIX Swiss Exchange", NA: "Euronext Amsterdam", BB: "Euronext Brussels", SM: "BME", GR: "Frankfurt", SS: "Nasdaq Stockholm" };
+  return suffix ? map[suffix] ?? suffix : "Non identifié";
+}
+function unique(values: (string | null | undefined)[]): string[] {
+  return [...new Set(values.filter((v): v is string => Boolean(v && v.trim())))].sort((a,b)=>a.localeCompare(b,"fr"));
+}
+function groupProducts(products: AmundiCatalogProduct[]) {
+  const map = new Map<string, AmundiCatalogProduct[]>();
+  for (const product of products) map.set(product.isin, [...(map.get(product.isin) ?? []), product]);
+  return [...map.entries()].map(([isin, listings]) => ({ isin, product: listings[0], listings }));
+}
+function App() {
+  const [page, setPage] = useState<Page>("overview");
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [showFilters, setShowFilters] = useState(true);
+  const [grouped, setGrouped] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [catalog, setCatalog] = useState<AmundiCatalogResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  const loadCatalog = async () => {
+    setLoading(true); setCatalogError(null);
+    try {
+      const response = await fetch("/api/catalog/amundi", { headers: { Accept: "application/json" } });
+      const data = await response.json() as AmundiCatalogResponse;
+      if (!response.ok || data.status !== "ok") throw new Error(data.status === "unparsed_source" ? "La page Amundi a changé de format. Aucune donnée n'a été importée." : "La source Amundi est momentanément indisponible.");
+      setCatalog(data);
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : "Erreur inconnue lors du chargement.");
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { if (page === "etfs" && catalog === null && !loading && !catalogError) void loadCatalog(); }, [page]);
+
+  const products = catalog?.products ?? [];
+  const filtered = useMemo(() => products.filter(p => {
+    const haystack = [p.name,p.isin,p.ticker,p.wkn,p.exposure].join(" ").toLowerCase();
+    return (!search || haystack.includes(search.toLowerCase()))
+      && (filters.currency === "Toutes" || p.currency === filters.currency)
+      && (filters.venue === "Toutes" || exchangeFromTicker(p.ticker) === filters.venue)
+      && (filters.sfdr === "Toutes" || p.sfdr === filters.sfdr)
+      && (filters.exposure === "Toutes" || p.exposure === filters.exposure);
+  }), [products, search, filters]);
+  const groups = useMemo(() => groupProducts(filtered), [filtered]);
+  const currencies = unique(products.map(p=>p.currency));
+  const venues = unique(products.map(p=>exchangeFromTicker(p.ticker)));
+  const sfdrs = unique(products.map(p=>p.sfdr));
+  const exposures = unique(products.map(p=>p.exposure));
+
+  const resetFilters = () => { setSearch(""); setFilters(emptyFilters); };
+  const hasFilters = search.length > 0 || Object.values(filters).some(v=>v!=="Toutes");
+  const nav = [
+    { id: "overview" as const, label: "Vue d'ensemble", icon: ChartNoAxesCombined },
+    { id: "etfs" as const, label: "Catalogue ETF", icon: Layers3 },
+    { id: "portfolio" as const, label: "Portefeuille", icon: Wallet },
+    { id: "sources" as const, label: "Sources & données", icon: Database },
+  ];
+
+  return <main className="app-shell">
+    <aside className="sidebar">
+      <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
+      <div className="workspace-label">ESPACE PERSONNEL</div>
+      <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>setPage(id)}><Icon size={18}/>{label}</button>)}</nav>
+      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.3.0 · EN CONSTRUCTION</span></div>
+    </aside>
+    <section className="main-content">
+      <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1></div><div className="topbar-right"><span className="status-dot"/>{catalog?"Catalogue source accessible":"Sources de marché non connectées"}<span className="avatar">P</span></div></header>
+
+      {page==="overview"&&<>
+        <section className="intro"><div><div className="eyebrow pale">VOTRE COCKPIT D'INVESTISSEMENT</div><h2>Moins d'intuition.<br/><em>Plus de preuves.</em></h2><p>Comparer, comprendre et arbitrer à partir de données vérifiables — jamais à partir de chiffres inventés.</p></div><div className="intro-stamp"><BadgeCheck size={18}/><span>Engagement<br/><strong>zéro donnée inventée</strong></span></div></section>
+        <section className="section-heading"><div><span className="eyebrow">SITUATION ACTUELLE</span><h2>Vos indicateurs</h2></div><span className="muted small">En attente de connexion aux sources</span></section>
+        <div className="metric-grid"><article className="metric-card"><div className="metric-label">Portefeuille analysé <Wallet size={17}/></div><div className="metric-value">—</div><div className="metric-note">Aucune donnée importée</div></article><article className="metric-card"><div className="metric-label">ETF Amundi <FileSpreadsheet size={17}/></div><div className="metric-value">{catalog?.sourceTotal ?? "—"}</div><div className="metric-note">Catalogue officiel à synchroniser</div></article><article className="metric-card"><div className="metric-label">Dernière actualisation <Activity size={17}/></div><div className="metric-value">—</div><div className="metric-note">Pas de flux de marché connecté</div></article><article className="metric-card"><div className="metric-label">Alertes de fiabilité <CircleAlert size={17}/></div><div className="metric-value">—</div><div className="metric-note">Contrôles en cours de construction</div></article></div>
+        <section className="section-heading"><div><span className="eyebrow">MÉTHODE</span><h2>Notre règle de décision</h2></div><span className="tag"><ShieldCheck size={14}/> Factuel uniquement</span></section>
+        <div className="principle-grid">{[{title:"Source obligatoire",detail:"Chaque chiffre renvoie à une source identifiable.",icon:Database},{title:"Date visible",detail:"La date de collecte et la fraîcheur sont affichées.",icon:Activity},{title:"Fait ≠ analyse",detail:"Observations, calculs et scénarios sont séparés.",icon:ShieldCheck}].map(({title,detail,icon:Icon},i)=><article className="principle-card" key={title}><div className="principle-top"><span>0{i+1}</span><Icon size={19}/></div><h3>{title}</h3><p>{detail}</p></article>)}</div>
+        <section className="decision-panel"><div className="decision-icon"><BookOpen size={20}/></div><div><span className="eyebrow">AIDE À LA DÉCISION</span><h2>Aucune recommandation sans éléments vérifiables.</h2><p>Chaque analyse présentera les faits observés, les calculs reproductibles, les limites des données et les risques. Une conclusion pourra être « données insuffisantes ».</p></div><div className="decision-mark"><ArrowUpRight size={20}/><ArrowDownRight size={20}/></div></section>
+      </>}
+
+      {page==="etfs"&&<section className="catalog-page">
+        <div className="catalog-intro"><div><span className="eyebrow">AMUNDI · SOURCE OFFICIELLE</span><h2>Le catalogue, lisible à votre rythme.</h2><p>Recherche et filtres sur les données publiées par Amundi. Les lignes sont regroupées par ISIN ; dépliez un produit pour voir ses cotations disponibles dans la source.</p></div><div className="catalog-count"><Layers3 size={19}/><span><strong>{catalog?.sourceTotal??"—"} produits référencés</strong><small>{catalog?.retrievedAt?new Date(catalog.retrievedAt).toLocaleString("fr-FR"):"Synchronisation non effectuée"}</small></span></div></div>
+        <div className="catalog-toolbar"><div className="search-field"><Search size={17}/><input aria-label="Rechercher un ETF" placeholder="Nom, ISIN, ticker, WKN ou indice…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button className="clear-search" onClick={()=>setSearch("")} aria-label="Effacer">×</button>}</div><button className={`secondary-button ${showFilters?"selected":""}`} onClick={()=>setShowFilters(v=>!v)}><SlidersHorizontal size={16}/> Filtres <ChevronDown size={14}/></button><div className="view-switch"><button className={grouped?"chosen":""} onClick={()=>setGrouped(true)}>Par produit</button><button className={!grouped?"chosen":""} onClick={()=>setGrouped(false)}>Par cotation</button></div><button className="refresh-button" onClick={()=>void loadCatalog()} disabled={loading} title="Actualiser le catalogue"><RefreshCw size={16} className={loading?"spin":""}/></button></div>
+        {showFilters&&<div className="filter-panel">
+          <label className="filter-control"><span>Devise de la part</span><select value={filters.currency} onChange={e=>setFilters(p=>({...p,currency:e.target.value}))}><option>Toutes</option>{currencies.map(v=><option key={v}>{v}</option>)}</select></label>
+          <label className="filter-control"><span>Place (déduite du ticker source)</span><select value={filters.venue} onChange={e=>setFilters(p=>({...p,venue:e.target.value}))}><option>Toutes</option>{venues.map(v=><option key={v}>{v}</option>)}</select></label>
+          <label className="filter-control"><span>Classification SFDR</span><select value={filters.sfdr} onChange={e=>setFilters(p=>({...p,sfdr:e.target.value}))}><option>Toutes</option>{sfdrs.map(v=><option key={v}>{v}</option>)}</select></label>
+          <label className="filter-control"><span>Exposition publiée</span><select value={filters.exposure} onChange={e=>setFilters(p=>({...p,exposure:e.target.value}))}><option>Toutes</option>{exposures.map(v=><option key={v}>{v}</option>)}</select></label>
+          <button className="reset-button" onClick={resetFilters} disabled={!hasFilters}><FilterX size={15}/> Réinitialiser</button>
+        </div>}
+        <div className="catalog-summary"><div><strong>{filtered.length} lignes sources</strong><span> · {groups.length} ISIN distincts</span></div><span className="data-status"><i/>{catalog?.completeness==="complete"?"Couverture complète signalée par la source":"Couverture partielle ou à confirmer"}</span></div>
+        {loading&&<div className="catalog-message"><RefreshCw className="spin" size={18}/> Chargement des données officielles Amundi…</div>}
+        {catalogError&&<div className="catalog-error"><CircleAlert size={18}/><span>{catalogError}</span><button onClick={()=>void loadCatalog()}>Réessayer</button></div>}
+        {!loading&&!catalogError&&catalog&&<div className="catalog-table-wrap">
+          <div className="catalog-table-head"><span>PRODUIT / COTATION</span><span>ISIN</span><span>DEVISE</span><span>FRAIS</span><span>VL AMUNDI</span><span>DATE VL</span><span>ÉTAT</span></div>
+          {grouped?groups.map(group=><div className="product-group" key={group.isin}>
+            <button className="product-parent" onClick={()=>setExpanded(old=>{const next=new Set(old);next.has(group.isin)?next.delete(group.isin):next.add(group.isin);return next;})}><span className="product-name"><span className="expand-icon">{expanded.has(group.isin)?<ChevronDown size={16}/>:<ChevronRight size={16}/>}</span><span><strong>{group.product.name||"Produit sans nom"}</strong><small>{group.listings.length} cotation(s) référencée(s) · {group.product.exposure||"Exposition non renseignée"}</small></span></span><span className="mono">{group.isin}</span><span>{group.product.currency||"—"}</span><span>{group.product.ongoingCharges||"—"}</span><span className="mono">{group.product.nav||"—"}</span><span>{group.product.navDate||"—"}</span><span className="source-tag">SOURCE AMUNDI</span></button>
+            {expanded.has(group.isin)&&<div className="listing-detail">{group.listings.map((item,i)=><div className="listing-row" key={item.ticker+"-"+i}><span><strong>{item.ticker}</strong><small>{exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="mono">{item.nav||"—"}</span><span>{item.navDate||"—"}</span><span className="source-tag">VL, pas un cours live</span></div>)}</div>}
+          </div>):filtered.map((item,i)=><div className="listing-row standalone" key={item.isin+"-"+item.ticker+"-"+i}><span><strong>{item.name}</strong><small>{item.ticker} · {exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="mono">{item.nav||"—"}</span><span>{item.navDate||"—"}</span><span className="source-tag">SOURCE AMUNDI</span></div>)}
+          {filtered.length===0&&<div className="catalog-message">Aucun produit ne correspond à ces critères.</div>}
+        </div>}
+        {!loading&&!catalogError&&!catalog&&<div className="catalog-message">Le catalogue officiel sera chargé à l'ouverture de cette page.</div>}
+        {catalog&&<div className="catalog-footnote">Source : <a href={catalog.source} target="_blank" rel="noreferrer">outil de recherche Amundi ETF</a>. Collecte : {catalog.retrievedAt?new Date(catalog.retrievedAt).toLocaleString("fr-FR"):"non connue"}. La VL est publiée par Amundi et n'est pas le cours négocié en Bourse. Les cours temps réel ne sont pas encore connectés.</div>}
+      </section>}
+
+      {page==="portfolio"&&<section className="placeholder-page"><Wallet size={24}/><h2>Suivi du portefeuille</h2><p>Cette section sera activée avec l'import des positions et le rapprochement des ISIN.</p></section>}
+      {page==="sources"&&<section className="placeholder-page"><Database size={24}/><h2>Sources & qualité des données</h2><p>Catalogue : outil de recherche officiel Amundi. Cotations temps réel : fournisseur de marché et droits de diffusion à configurer. Aucune valeur liquidative n'est assimilée à un cours boursier.</p></section>}
+      <footer><span>INVESTPILOT · 2026</span><span>Les performances passées ne préjugent pas des performances futures.</span></footer>
+    </section>
+  </main>;
+}
+export default App;
