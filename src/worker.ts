@@ -171,28 +171,59 @@ async function getEuronextTrades(request: Request): Promise<Response> {
 
 async function getAmundiCatalog(request: Request): Promise<Response> {
   const search = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
+  const headers = {
+    Accept: "text/html,application/xhtml+xml",
+    "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.5; +catalogue source attribution)",
+    Referer: AMUNDI_SOURCE
+  };
   try {
-    const headers = { Accept: "text/html", "User-Agent": "InvestPilot/0.3 (+catalogue source attribution)" };
-    const upstream = await fetch(AMUNDI_SOURCE, { headers });
-    if (!upstream.ok) {
-      return json({ status: "source_unavailable", source: AMUNDI_SOURCE, upstreamStatus: upstream.status, products: [] }, 502);
+    const firstResponse = await fetch(AMUNDI_SOURCE, { headers });
+    if (!firstResponse.ok) {
+      return json({ status: "source_unavailable", source: AMUNDI_SOURCE, upstreamStatus: firstResponse.status, products: [] }, 502);
     }
-    const firstPage = await upstream.text();
-    const pageLinks = discoverAmundiPaginationLinks(firstPage, AMUNDI_SOURCE);
-    const pages = [firstPage];
-    let failedPageCount = 0;
-    for (const pageUrl of pageLinks) {
-      try {
-        const pageResponse = await fetch(pageUrl, { headers });
-        if (pageResponse.ok) pages.push(await pageResponse.text());
-        else failedPageCount += 1;
-      } catch {
-        failedPageCount += 1;
-      }
-    }
-    const rawRows = pages.flatMap(html => parseAmundiRows(html, AMUNDI_SOURCE));
-    const products = [...new Map(rawRows.map(row => [row.isin + "|" + row.ticker, row])).values()];
+
+    const firstPage = await firstResponse.text();
     const sourceTotal = extractAmundiTotal(firstPage);
+    // Amundi renders 50 products on the initial page; its pager is JavaScript,
+    // so the remaining numbered pages must also be requested explicitly.
+    const pageUrls = [...new Set([
+      ...discoverAmundiPaginationLinks(firstPage, AMUNDI_SOURCE),
+      ...buildAmundiPageUrls(AMUNDI_SOURCE, sourceTotal, 50)
+    ])].filter(url => {
+      try {
+        const parsed = new URL(url);
+        return parsed.origin === new URL(AMUNDI_SOURCE).origin && parsed.pathname === new URL(AMUNDI_SOURCE).pathname;
+      } catch { return false; }
+    });
+
+    const pageResults = await Promise.all(pageUrls.map(async url => {
+      try {
+        const response = await fetch(url, { headers });
+        return response.ok
+          ? { url, html: await response.text(), failed: false }
+          : { url, html: "", failed: true };
+      } catch {
+        return { url, html: "", failed: true };
+      }
+    }));
+
+    const htmlPages = [firstPage];
+    let failedPages = pageResults.filter(page => page.failed).length;
+    const seenPageBodies = new Set([firstPage]);
+    for (const page of pageResults) {
+      if (page.failed || !page.html) continue;
+      // Some CDN responses ignore ?page=. Never count a repeated first page
+      // as a successful fetch of a different catalogue batch.
+      if (seenPageBodies.has(page.html)) {
+        failedPages += 1;
+        continue;
+      }
+      seenPageBodies.add(page.html);
+      htmlPages.push(page.html);
+    }
+
+    const rawRows = htmlPages.flatMap(html => parseAmundiRows(html, AMUNDI_SOURCE));
+    const products = [...new Map(rawRows.map(row => [row.isin + "|" + row.ticker, row])).values()];
     const productCount = countUniqueAmundiProducts(products);
     const navMissingCount = products.filter(product => !product.nav).length;
     const navWithoutDateCount = products.filter(product => Boolean(product.nav) && !product.navDate).length;
@@ -201,10 +232,13 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         const [day, month, year] = value.split("/");
         return { display: value, iso: `${year}-${month}-${day}` };
       }).sort((a, b) => a.iso.localeCompare(b.iso));
-    const complete = sourceTotal !== null && productCount === sourceTotal && failedPageCount === 0 && pageLinks.length < 20;
+    const expectedPages = sourceTotal === null ? null : Math.ceil(sourceTotal / 50);
+    const allExpectedPagesFetched = expectedPages !== null && htmlPages.length === expectedPages;
+    const complete = sourceTotal !== null && productCount === sourceTotal && failedPages === 0 && allExpectedPagesFetched;
     const filtered = search
       ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
       : products;
+
     return json({
       status: products.length ? "ok" : "unparsed_source",
       source: AMUNDI_SOURCE,
@@ -213,7 +247,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       productCount,
       listingCount: products.length,
       returnedCount: filtered.length,
-      pageCount: pages.length,
+      pageCount: htmlPages.length,
       completeness: complete ? "complete" : "partial",
       audit: {
         officialProductTotal: sourceTotal,
@@ -221,23 +255,22 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         parsedListingCount: rawRows.length,
         uniqueListingCount: products.length,
         duplicateListingRows: rawRows.length - products.length,
-        discoveredAdditionalPages: pageLinks.length,
-        fetchedPages: pages.length,
-        failedPages: failedPageCount,
+        discoveredAdditionalPages: pageUrls.length,
+        fetchedPages: htmlPages.length,
+        failedPages,
         missingNavCount: navMissingCount,
         navWithoutPublicationDateCount: navWithoutDateCount,
         oldestNavDate: navDates[0]?.display ?? null,
         newestNavDate: navDates.at(-1)?.display ?? null,
-        completenessRule: "Complete only when the official total equals the distinct ISIN count and every discovered page was fetched."
+        completenessRule: "Complet uniquement si tous les lots attendus sont récupérés, sans page en échec, et si le nombre d'ISIN distincts égale le total officiel Amundi."
       },
-      notice: "Les valeurs liquidatives Amundi ne sont pas des cours de marché en temps réel. Aucun cours live n'est fourni par cet endpoint.",
+      notice: "Les valeurs liquidatives Amundi sont des valeurs publiées par l'émetteur, pas des cours de marché en temps réel. Les cours de marché sont fournis séparément lorsqu'une source de cotation les publie.",
       products: filtered
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
   } catch {
     return json({ status: "source_unavailable", source: AMUNDI_SOURCE, products: [] }, 502);
   }
 }
-
 
 const INSURANCE_FEES_CSV = "https://www.data.gouv.fr/api/1/datasets/r/3a1608bf-25e2-421f-bbd5-e46ae42256ab";
 const INSURANCE_EURO_CSV = "https://www.data.gouv.fr/api/1/datasets/r/d6c8853b-b38e-4aa3-a119-4cb7935429a6";
