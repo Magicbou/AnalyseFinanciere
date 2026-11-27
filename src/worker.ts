@@ -249,7 +249,9 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         widgetScriptDiagnostics = {
           status: widgetResponse.status,
           length: widgetScript.length,
-          urlStrings: [...new Set(widgetScript.match(/(?:https?:)?\/\/[^"'\s]+/g) ?? [])].slice(0, 60),
+          apiUrlDeclarations: [...new Set(widgetScript.match(/API_URL\\s*=\\s*"[^"]+"/g) ?? [])].slice(0, 100),
+          mapiPaths: [...new Set(widgetScript.match(/\\/mapi\\/[A-Za-z0-9_/-]+/g) ?? [])].slice(0, 100),
+          urlStrings: [...new Set(widgetScript.match(/(?:https?:)?\\/\\/[^"'\\s]+/g) ?? [])].slice(0, 60),
           endpointContexts: [...widgetScript.matchAll(/.{0,100}(?:API_URL=|\/mapi\/|mapi\/|etfFinder|etf-finder|finder\/|funds?\/).{0,180}/gi)].slice(-160).map(match => match[0])
         };
       } catch (error) {
