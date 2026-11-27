@@ -1,14 +1,10 @@
 name = "analysefinanciere"
+main = "src/worker.ts"
 compatibility_date = "2026-11-27"
 
-# Application React/Vite servie par Cloudflare Workers Static Assets.
-# Le dossier dist est généré par `npm run build`.
+# React/Vite est servi par Workers Static Assets.
+# Les routes /api/* sont traitées par le Worker avant le repli vers les assets.
 [assets]
 directory = "./dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
-
-# Ajouter le binding D1 après création de la base dans Cloudflare :
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "investpilot"
-# database_id = "<ID_D1>"
