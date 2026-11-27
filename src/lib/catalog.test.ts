@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesAmundiSearch, type AmundiCatalogProduct } from "./catalog";
+import { matchesAmundiFilters, matchesAmundiSearch, type AmundiCatalogProduct } from "./catalog";
 
 const product: AmundiCatalogProduct = {
   name: "Amundi MSCI World UCITS ETF Acc",
@@ -43,5 +43,28 @@ describe("Amundi ETF catalogue search", () => {
 
   it("does not return a product when a search token is absent", () => {
     expect(matchesAmundiSearch(product, "Nasdaq 100")).toBe(false);
+  });
+});
+
+describe("Amundi ETF catalogue filters", () => {
+  it.each([
+    ["devise", { currency: "EUR", venue: "Euronext Paris", sfdr: "Toutes", exposure: "Toutes" }],
+    ["place de cotation", { currency: "Toutes", venue: "Euronext Paris", sfdr: "Toutes", exposure: "Toutes" }],
+    ["classification SFDR", { currency: "Toutes", venue: "Toutes", sfdr: "Article 8", exposure: "Toutes" }],
+    ["exposition / indice", { currency: "Toutes", venue: "Toutes", sfdr: "Toutes", exposure: "MSCI World" }]
+  ] as const)("applies the %s filter", (_label, filters) => {
+    expect(matchesAmundiFilters(product, filters, "Euronext Paris")).toBe(true);
+  });
+
+  it("rejects a product that does not match the selected filters", () => {
+    expect(matchesAmundiFilters(product, {
+      currency: "USD", venue: "Toutes", sfdr: "Toutes", exposure: "Toutes"
+    }, "Euronext Paris")).toBe(false);
+  });
+
+  it("supports combining several filters", () => {
+    expect(matchesAmundiFilters(product, {
+      currency: "EUR", venue: "Euronext Paris", sfdr: "Article 8", exposure: "MSCI World"
+    }, "Euronext Paris")).toBe(true);
   });
 });
