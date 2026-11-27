@@ -24,7 +24,7 @@ function groupProducts(products: AmundiCatalogProduct[]) {
   return [...map.entries()].map(([isin, listings]) => ({ isin, product: listings[0], listings }));
 }
 function App() {
-  const [page, setPage] = useState<Page>("overview");
+  const [page, setPage] = useState<Page>(() => { const candidate = window.location.hash.slice(1) as Page; return ["overview","etfs","assurance","portfolio","sources"].includes(candidate) ? candidate : "overview"; });
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [showFilters, setShowFilters] = useState(true);
@@ -129,9 +129,9 @@ function App() {
 
   return <main className="app-shell">
     <aside className="sidebar">
-      <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
+      <a className="brand" href="#" onClick={e=>{e.preventDefault();window.location.hash="overview";setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
       <div className="workspace-label">ESPACE PERSONNEL</div>
-      <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>setPage(id)}><Icon size={18}/>{label}</button>)}</nav>
+      <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>{window.location.hash=id;setPage(id);}}><Icon size={18}/>{label}</button>)}</nav>
       <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.5.0 · EN CONSTRUCTION</span></div>
     </aside>
     <section className="main-content">
