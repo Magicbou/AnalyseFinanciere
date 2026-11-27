@@ -24,3 +24,16 @@
 .market-value{display:grid;gap:4px;font:700 11px Manrope,sans-serif;color:#314b37;font-variant-numeric:tabular-nums;white-space:nowrap}.market-value small{font:400 9px 'DM Sans',sans-serif;color:#89958b;white-space:normal}.text-button{border:0;background:transparent;color:#607b51;text-decoration:underline;text-underline-offset:2px;font-size:10px;padding:0 3px}
 
 @media(max-width:1100px){.catalog-table-wrap{overflow-x:auto}.catalog-table-head,.product-parent,.listing-row{min-width:960px}}
+
+
+/* Comparateur assurance-vie : tableau dense, horizontalement défilant sur mobile. */
+.insurance-table{overflow-x:auto}
+.insurance-table-head,.insurance-row{display:grid;grid-template-columns:2fr .8fr .8fr .8fr .8fr 1fr .8fr .8fr;gap:12px;align-items:center;min-width:1080px;padding:13px 15px}
+.insurance-table-head{background:#f8faf7;border-bottom:1px solid #e8ede6;color:#849087;font-size:8px;font-weight:700;letter-spacing:.7px}
+.insurance-row{border-bottom:1px solid #edf0eb;color:#4e5d52;font-size:10px;font-variant-numeric:tabular-nums}
+.insurance-row:last-child{border-bottom:0}
+.insurance-row>span:first-child{display:grid;gap:4px;min-width:0}
+.insurance-row strong{font-size:11px;line-height:1.4;color:#354438}
+.insurance-row small{font-size:9px;line-height:1.4;color:#89958b}
+.insurance-row .nav-value{display:grid;gap:4px}
+.insurance-row .nav-value small{font:400 9px 'DM Sans',sans-serif;white-space:normal}
