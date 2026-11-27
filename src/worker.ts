@@ -31,7 +31,7 @@ async function getEcbFx(): Promise<Response> {
       const fields = row.split(",");
       const observationDate = fields[dateIndex];
       const parsed = Number(fields[valueIndex]);
-      if (!/^\d{4}-\\d{2}-\\d{2}$/.test(observationDate || "") || !Number.isFinite(parsed) || parsed <= 0) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(observationDate || "") || !Number.isFinite(parsed) || parsed <= 0) {
         return { currency, rate: null, observationDate: null, status: "invalid_observation" };
       }
       const ageDays = (Date.parse(retrievedAt.slice(0, 10)) - Date.parse(observationDate)) / 86400000;
