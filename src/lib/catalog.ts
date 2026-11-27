@@ -33,11 +33,11 @@ export type AmundiCatalogResponse = {
 };
 
 function normalizeSearchText(value: string): string {
-  return value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLocaleLowerCase("fr-FR").trim();
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").trim();
 }
 
 export function matchesAmundiSearch(product: AmundiCatalogProduct, query: string): boolean {
-  const tokens = normalizeSearchText(query).split(/\\s+/).filter(Boolean);
+  const tokens = normalizeSearchText(query).split(/\s+/).filter(Boolean);
   if (!tokens.length) return true;
   const searchable = normalizeSearchText([
     product.name, product.isin, product.ticker, product.wkn, product.exposure,
