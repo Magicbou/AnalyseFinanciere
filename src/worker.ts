@@ -250,7 +250,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           status: widgetResponse.status,
           length: widgetScript.length,
           urlStrings: [...new Set(widgetScript.match(/(?:https?:)?\/\/[^"'\s]+/g) ?? [])].slice(0, 60),
-          endpointContexts: [...widgetScript.matchAll(/.{0,100}(?:api|graphql|ajax|search|endpoint|finder|products).{0,140}/gi)].slice(0, 60).map(match => match[0])
+          endpointContexts: [...widgetScript.matchAll(/.{0,100}(?:API_URL=|\/mapi\/|mapi\/|etfFinder|etf-finder|finder\/|funds?\/).{0,180}/gi)].slice(-160).map(match => match[0])
         };
       } catch (error) {
         widgetScriptDiagnostics = { error: error instanceof Error ? error.message : "script fetch failed" };
