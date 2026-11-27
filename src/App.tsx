@@ -33,7 +33,11 @@ function App() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [fxData, setFxData] = useState<{source:string;retrievedAt:string;observations:{currency:string;rate:number|null;observationDate:string|null;status:string}[]} | null>(null);
   const [fxError, setFxError] = useState<string | null>(null);
-  const [fxLoading, setFxLoading] = useState(false);\n  const [euronextTrades, setEuronextTrades] = useState<Record<string,EuronextTrade>>({});\n  const [euronextLoading, setEuronextLoading] = useState(false);\n  const [euronextRetrievedAt, setEuronextRetrievedAt] = useState<string|null>(null);\n  const [euronextError, setEuronextError] = useState<string|null>(null);
+  const [fxLoading, setFxLoading] = useState(false);
+  const [euronextTrades, setEuronextTrades] = useState<Record<string,EuronextTrade>>({});
+  const [euronextLoading, setEuronextLoading] = useState(false);
+  const [euronextRetrievedAt, setEuronextRetrievedAt] = useState<string|null>(null);
+  const [euronextError, setEuronextError] = useState<string|null>(null);
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void loadFx(); }, []);
 
@@ -63,7 +67,8 @@ function App() {
       const response = await fetch("/api/catalog/amundi", { headers: { Accept: "application/json" } });
       const data = await response.json() as AmundiCatalogResponse;
       if (!response.ok || data.status !== "ok") throw new Error(data.status === "unparsed_source" ? "La page Amundi a changé de format. Aucune donnée n'a été importée." : "La source Amundi est momentanément indisponible.");
-      setCatalog(data);\n      void loadEuronext(data.products);
+      setCatalog(data);
+      void loadEuronext(data.products);
     } catch (error) {
       setCatalogError(error instanceof Error ? error.message : "Erreur inconnue lors du chargement.");
     } finally { setLoading(false); }
