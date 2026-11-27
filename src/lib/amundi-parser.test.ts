@@ -18,7 +18,17 @@ describe("Amundi public catalogue parser", () => {
       { isin: "LU1135865084" }, { isin: "lu1135865084" }, { isin: "IE000BI8OT95" }, { isin: "" }
     ])).toBe(2);
   });
-  it("builds every additional 50-row page from the official total", () => {\n    const pages = buildAmundiPageUrls(source, 654);\n    expect(pages).toHaveLength(13);\n    expect(pages[0]).toBe(source + "?page=1");\n    expect(pages[12]).toBe(source + "?page=13");\n  });\n  it("does not invent additional pages when the official total fits on one page", () => {\n    expect(buildAmundiPageUrls(source, 50)).toEqual([]);\n    expect(buildAmundiPageUrls(source, null)).toEqual([]);\n  });\n  it("only follows pagination links on the official catalogue path", () => {
+  it("builds every additional 50-row page from the official total", () => {
+    const pages = buildAmundiPageUrls(source, 654);
+    expect(pages).toHaveLength(13);
+    expect(pages[0]).toBe(source + "?page=1");
+    expect(pages[12]).toBe(source + "?page=13");
+  });
+  it("does not invent additional pages when the official total fits on one page", () => {
+    expect(buildAmundiPageUrls(source, 50)).toEqual([]);
+    expect(buildAmundiPageUrls(source, null)).toEqual([]);
+  });
+  it("only follows pagination links on the official catalogue path", () => {
     const html = '<a href="?page=1">1</a><a href="https://evil.example/?page=2">x</a><a href="/other?page=3">y</a>';
     expect(discoverAmundiPaginationLinks(html, source)).toEqual([source + "?page=1"]);
   });
