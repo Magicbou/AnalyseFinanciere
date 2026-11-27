@@ -61,15 +61,30 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       return json({ status: "source_unavailable", source: AMUNDI_SOURCE, upstreamStatus: upstream.status, products: [] }, 502);
     }
     const firstPage = await upstream.text();
+    const pageLinks = discoverAmundiPaginationLinks(firstPage, AMUNDI_SOURCE);
     const pages = [firstPage];
-    for (const pageUrl of discoverAmundiPaginationLinks(firstPage, AMUNDI_SOURCE)) {
-      const pageResponse = await fetch(pageUrl, { headers });
-      if (pageResponse.ok) pages.push(await pageResponse.text());
+    let failedPageCount = 0;
+    for (const pageUrl of pageLinks) {
+      try {
+        const pageResponse = await fetch(pageUrl, { headers });
+        if (pageResponse.ok) pages.push(await pageResponse.text());
+        else failedPageCount += 1;
+      } catch {
+        failedPageCount += 1;
+      }
     }
-    const rows = pages.flatMap(html => parseAmundiRows(html, AMUNDI_SOURCE));
-    const products = [...new Map(rows.map(row => [row.isin + "|" + row.ticker, row])).values()];
+    const rawRows = pages.flatMap(html => parseAmundiRows(html, AMUNDI_SOURCE));
+    const products = [...new Map(rawRows.map(row => [row.isin + "|" + row.ticker, row])).values()];
     const sourceTotal = extractAmundiTotal(firstPage);
     const productCount = countUniqueAmundiProducts(products);
+    const navMissingCount = products.filter(product => !product.nav).length;
+    const navWithoutDateCount = products.filter(product => Boolean(product.nav) && !product.navDate).length;
+    const navDates = products.map(product => product.navDate).filter((value): value is string => Boolean(value))
+      .map(value => {
+        const [day, month, year] = value.split("/");
+        return { display: value, iso: `${year}-${month}-${day}` };
+      }).sort((a, b) => a.iso.localeCompare(b.iso));
+    const complete = sourceTotal !== null && productCount === sourceTotal && failedPageCount === 0 && pageLinks.length < 20;
     const filtered = search
       ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
       : products;
@@ -82,7 +97,22 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       listingCount: products.length,
       returnedCount: filtered.length,
       pageCount: pages.length,
-      completeness: sourceTotal !== null && productCount === sourceTotal ? "complete" : "partial",
+      completeness: complete ? "complete" : "partial",
+      audit: {
+        officialProductTotal: sourceTotal,
+        uniqueIsinCount: productCount,
+        parsedListingCount: rawRows.length,
+        uniqueListingCount: products.length,
+        duplicateListingRows: rawRows.length - products.length,
+        discoveredAdditionalPages: pageLinks.length,
+        fetchedPages: pages.length,
+        failedPages: failedPageCount,
+        missingNavCount: navMissingCount,
+        navWithoutPublicationDateCount: navWithoutDateCount,
+        oldestNavDate: navDates[0]?.display ?? null,
+        newestNavDate: navDates.at(-1)?.display ?? null,
+        completenessRule: "Complete only when the official total equals the distinct ISIN count and every discovered page was fetched."
+      },
       notice: "Les valeurs liquidatives Amundi ne sont pas des cours de marché en temps réel. Aucun cours live n'est fourni par cet endpoint.",
       products: filtered
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
