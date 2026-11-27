@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Globe2, Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen, ChartNoAxesCombined, ChevronDown, ChevronRight, CircleAlert, Database, FileSpreadsheet, FilterX, Layers3, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Wallet } from "lucide-react";
-import { matchesAmundiSearch, type AmundiCatalogProduct, type AmundiCatalogResponse } from "./lib/catalog";
+import { matchesAmundiFilters, matchesAmundiSearch, type AmundiCatalogProduct, type AmundiCatalogResponse } from "./lib/catalog";
 
 type Page = "overview" | "etfs" | "assurance" | "portfolio" | "sources";
 type Filters = { currency: string; venue: string; sfdr: string; exposure: string };
@@ -107,13 +107,14 @@ function App() {
   };
   useEffect(() => { if (page === "etfs" && catalog === null && !loading && !catalogError) void loadCatalog(); if (page === "assurance" && assuranceData === null && !assuranceLoading && !assuranceError) void loadAssuranceVie(); }, [page]);
 
-  const products = [...(catalog?.products ?? []), ...manualProducts];
+  const products = useMemo(() => {
+    const official = catalog?.products ?? [];
+    const officialIsins = new Set(official.map(product => product.isin.toUpperCase()));
+    return [...official, ...manualProducts.filter(product => !officialIsins.has(product.isin.toUpperCase()))];
+  }, [catalog?.products, manualProducts]);
   const filtered = useMemo(() => products.filter(p => {
     return matchesAmundiSearch(p, search)
-      && (filters.currency === "Toutes" || p.currency === filters.currency)
-      && (filters.venue === "Toutes" || exchangeFromTicker(p.ticker) === filters.venue)
-      && (filters.sfdr === "Toutes" || p.sfdr === filters.sfdr)
-      && (filters.exposure === "Toutes" || p.exposure === filters.exposure);
+      && matchesAmundiFilters(p, filters, exchangeFromTicker(p.ticker));
   }), [products, search, filters]);
   const groups = useMemo(() => groupProducts(filtered), [filtered]);
   const currencies = unique(products.map(p=>p.currency));
@@ -137,6 +138,14 @@ function App() {
     }
     if (nav && (!navDate || !source)) {
       setManualError("Pour saisir une VL, indique obligatoirement sa date et l'URL de sa source.");
+      return;
+    }
+    if (nav && !/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(navDate)) {
+      setManualError("La date de la VL doit être au format JJ/MM/AAAA.");
+      return;
+    }
+    if (nav && (() => { try { const url = new URL(source); return url.protocol !== "https:" && url.protocol !== "http:"; } catch { return true; } })()) {
+      setManualError("L'URL de la source de la VL doit être valide.");
       return;
     }
     if (nav && (!Number.isFinite(Number(nav.replace(",", "."))) || Number(nav.replace(",", ".")) <= 0)) {
@@ -238,6 +247,7 @@ function App() {
           <div className="catalog-table-head"><span>PRODUIT / COTATION</span><span>ISIN</span><span>DEVISE</span><span>FRAIS</span><span>VL AMUNDI / PART</span><span>DATE DE PUBLICATION</span><span>DERNIER ÉCHANGE Euronext</span><span>ÉTAT</span></div>
           {grouped?groups.map(group=><div className="product-group" key={group.isin}>
             <button className="product-parent" onClick={()=>setExpanded(old=>{const next=new Set(old);next.has(group.isin)?next.delete(group.isin):next.add(group.isin);return next;})}><span className="product-name"><span className="expand-icon">{expanded.has(group.isin)?<ChevronDown size={16}/>:<ChevronRight size={16}/>}</span><span><strong>{group.product.name||"Produit sans nom"}</strong><small>{group.listings.length} cotation(s) référencée(s) · {group.product.exposure||"Exposition non renseignée"}</small></span></span><span className="mono">{group.isin}</span><span>{group.product.currency||"—"}</span><span>{group.product.ongoingCharges||"—"}</span><span className="nav-value">{group.product.nav ? `${group.product.nav} ${group.product.currency}` : "Indisponible"}</span><span className="nav-date">{group.product.navDate ? `VL du ${group.product.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[group.isin]?.status==="trade_found" ? `${euronextTrades[group.isin].price} ${euronextTrades[group.isin].currency||group.product.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[group.isin]?.tradeTime?new Date(euronextTrades[group.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className={`source-tag ${group.product.sourceType==="manual"?"manual-source-tag":""}`}>{group.product.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span></button>
+            {group.product.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(group.isin)}>Retirer cet ajout manuel</button>}
             {expanded.has(group.isin)&&<div className="listing-detail">{group.listings.map((item,i)=><div className="listing-row" key={item.ticker+"-"+i}><span><strong>{item.ticker}</strong><small>{exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}</div>)}</div>}
           </div>):filtered.map((item,i)=><div className="listing-row standalone" key={item.isin+"-"+item.ticker+"-"+i}><span><strong>{item.name}</strong><small>{item.ticker} · {exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className="market-value">{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}</div>)}
           {filtered.length===0&&<div className="catalog-message">Aucun produit ne correspond à ces critères.</div>}
