@@ -1,7 +1,7 @@
 name: InvestPilot CI
 on:
   push:
-    branches: [main, develop, "feat/**"]
+    branches: [main, develop, "feat/**", "fix/**"]
   pull_request:
     branches: [main, develop]
 permissions:
@@ -20,6 +20,32 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Smoke-test Cloudflare Pages Worker and static assets
+        shell: bash
+        run: |
+          test -s dist/index.html
+          test -s dist/_worker.js
+          setsid npx --yes wrangler@4 pages dev dist --ip 127.0.0.1 --port 8788 --log-level error > /tmp/investpilot-pages.log 2>&1 &
+          server_pid=$!
+          trap 'kill -- -"$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:8788/api/health > /tmp/investpilot-health.json; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/investpilot-pages.log
+            exit 1
+          fi
+          node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("/tmp/investpilot-health.json","utf8")); if(data.status!=="ok" || data.version!=="0.5.0") { console.error(data); process.exit(1); }'
+          curl --silent --fail http://127.0.0.1:8788/ | grep -qi "InvestPilot"
+          curl --silent --show-error --fail --max-time 45 http://127.0.0.1:8788/api/assurance-vie/contracts > /tmp/investpilot-assurance.json
+          node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("/tmp/investpilot-assurance.json","utf8")); const contract=data.contracts?.find(item=>item.slug==="linxea-spirit-2"); if(data.status!=="ok" || data.contractCount<10 || !contract || contract.entryFeePct!==0 || contract.ucManagementFeePct!==0.5) { console.error(data.message || data); process.exit(1); }'
+          curl --silent --show-error --fail --max-time 30 http://127.0.0.1:8788/api/market/fx > /tmp/investpilot-fx.json
+          node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("/tmp/investpilot-fx.json","utf8")); if(!Array.isArray(data.observations) || data.observations.length!==4) { console.error(data); process.exit(1); }'
       - uses: actions/upload-artifact@v4
         with:
           name: investpilot-package-lock
