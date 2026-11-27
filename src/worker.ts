@@ -73,23 +73,38 @@ function parseCsvLine(line: string): string[] {
 async function extractZipText(buffer: ArrayBuffer): Promise<string> {
   const bytes = new Uint8Array(buffer);
   const view = new DataView(buffer);
-  // Read the first local ZIP entry. Euronext's download is expected to contain one CSV.
-  if (view.getUint32(0, true) !== 0x04034b50) throw new Error("Format ZIP Euronext non reconnu");
-  const flags = view.getUint16(6, true);
-  const method = view.getUint16(8, true);
-  const compressedSize = view.getUint32(18, true);
-  const nameLength = view.getUint16(26, true);
-  const extraLength = view.getUint16(28, true);
-  if ((flags & 0x08) !== 0) throw new Error("Archive ZIP avec descripteur non prise en charge");
-  const start = 30 + nameLength + extraLength;
-  const compressed = bytes.slice(start, start + compressedSize);
-  let output: Uint8Array;
-  if (method === 0) output = compressed;
-  else if (method === 8) {
-    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-    output = new Uint8Array(await new Response(stream).arrayBuffer());
-  } else throw new Error("Compression ZIP non prise en charge");
-  return new TextDecoder("utf-8").decode(output);
+  // Locate the ZIP central directory so data-descriptor archives are supported too.
+  let eocd = -1;
+  for (let offset = Math.max(0, bytes.length - 65557); offset <= bytes.length - 22; offset++) {
+    if (view.getUint32(offset, true) === 0x06054b50) eocd = offset;
+  }
+  if (eocd < 0) throw new Error("Archive ZIP Euronext non reconnue");
+  const entries = view.getUint16(eocd + 10, true);
+  let cursor = view.getUint32(eocd + 16, true);
+  for (let entry = 0; entry < entries; entry++) {
+    if (view.getUint32(cursor, true) !== 0x02014b50) throw new Error("Répertoire ZIP Euronext invalide");
+    const method = view.getUint16(cursor + 10, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const localOffset = view.getUint32(cursor + 42, true);
+    const filename = new TextDecoder().decode(bytes.slice(cursor + 46, cursor + 46 + nameLength));
+    cursor += 46 + nameLength + extraLength + commentLength;
+    if (filename.endsWith("/")) continue;
+    if (view.getUint32(localOffset, true) !== 0x04034b50) throw new Error("Entrée ZIP Euronext invalide");
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+    if (method === 0) return new TextDecoder("utf-8").decode(compressed);
+    if (method === 8) {
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      return new TextDecoder("utf-8").decode(await new Response(stream).arrayBuffer());
+    }
+    throw new Error("Compression ZIP Euronext non prise en charge");
+  }
+  throw new Error("Aucun fichier CSV dans l'archive Euronext");
 }
 
 async function getEuronextTrades(request: Request): Promise<Response> {
