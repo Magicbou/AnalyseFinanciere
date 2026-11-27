@@ -105,7 +105,16 @@ function App() {
           <label className="filter-control"><span>Exposition publiée</span><select value={filters.exposure} onChange={e=>setFilters(p=>({...p,exposure:e.target.value}))}><option>Toutes</option>{exposures.map(v=><option key={v}>{v}</option>)}</select></label>
           <button className="reset-button" onClick={resetFilters} disabled={!hasFilters}><FilterX size={15}/> Réinitialiser</button>
         </div>}
-        <div className="catalog-summary"><div><strong>{filtered.length} lignes sources</strong><span> · {groups.length} ISIN distincts</span></div><span className="data-status"><i/>{catalog?.completeness==="complete"?"Couverture complète signalée par la source":"Couverture partielle ou à confirmer"}</span></div>
+        <div className="catalog-summary"><div><strong>{filtered.length} lignes affichées</strong><span> · {groups.length} ISIN dans le résultat filtré</span></div><span className={`data-status ${catalog?.completeness==="complete"?"verified":"warning"}`}><i/>{catalog?.completeness==="complete"?"Audit complet : total officiel rapproché":"Audit incomplet : exhaustivité non démontrée"}</span></div>
+        {catalog?.audit&&<div className="catalog-audit-grid" aria-label="Contrôle d'exhaustivité du catalogue Amundi">
+          <div><small>Total annoncé par Amundi</small><strong>{catalog.audit.officialProductTotal??"Indisponible"}</strong></div>
+          <div><small>ISIN distincts récupérés</small><strong>{catalog.audit.uniqueIsinCount}</strong></div>
+          <div><small>Cotations analysées</small><strong>{catalog.audit.parsedListingCount}</strong></div>
+          <div><small>Pages non récupérées</small><strong>{catalog.audit.failedPages}</strong></div>
+          <div><small>VL sans valeur</small><strong>{catalog.audit.missingNavCount}</strong></div>
+          <div><small>VL sans date</small><strong>{catalog.audit.navWithoutPublicationDateCount}</strong></div>
+          <p>Règle : le catalogue n'est déclaré complet que si le nombre d'ISIN distincts correspond au total officiel Amundi et si toutes les pages détectées ont été récupérées. Dernière VL publiée : {catalog.audit.newestNavDate??"non disponible"}.</p>
+        </div>}
         {loading&&<div className="catalog-message"><RefreshCw className="spin" size={18}/> Chargement des données officielles Amundi…</div>}
         {catalogError&&<div className="catalog-error"><CircleAlert size={18}/><span>{catalogError}</span><button onClick={()=>void loadCatalog()}>Réessayer</button></div>}
         {!loading&&!catalogError&&catalog&&<div className="catalog-table-wrap">
