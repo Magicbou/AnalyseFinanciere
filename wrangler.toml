@@ -1,0 +1,9 @@
+name = "investpilot"
+compatibility_date = "2026-11-27"
+pages_build_output_dir = "./dist"
+
+# Ajouter le binding D1 après création de la base dans Cloudflare :
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "investpilot"
+# database_id = "<ID_D1>"
