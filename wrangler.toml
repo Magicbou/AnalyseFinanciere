@@ -1,10 +1,3 @@
 name = "analysefinanciere"
-main = "src/worker.ts"
-compatibility_date = "2026-11-27"
-
-# React/Vite est servi par Workers Static Assets.
-# Les routes /api/* sont traitées par le Worker avant le repli vers les assets.
-[assets]
-directory = "./dist"
-binding = "ASSETS"
-not_found_handling = "single-page-application"
+compatibility_date = "2026-05-03"
+pages_build_output_dir = "./dist"

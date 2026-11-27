@@ -243,10 +243,10 @@ const INSURANCE_FEES_CSV = "https://www.data.gouv.fr/api/1/datasets/r/3a1608bf-2
 const INSURANCE_EURO_CSV = "https://www.data.gouv.fr/api/1/datasets/r/d6c8853b-b38e-4aa3-a119-4cb7935429a6";
 
 function parseCsvDocument(input: string): Record<string, string>[] {
-  const source = input.replace(/^\\uFEFF/, "");
-  const firstLine = source.split(/\\r?\\n/, 1)[0] ?? "";
+  const source = input.replace(/^\uFEFF/, "");
+  const firstLine = source.split(/\r?\n/, 1)[0] ?? "";
   const delimiter = (() => {
-    const counts = [",", ";", "\\t"].map(separator => {
+    const counts = [",", ";", "\t"].map(separator => {
       let quoted = false, count = 0;
       for (let i = 0; i < firstLine.length; i++) {
         if (firstLine[i] === '"') quoted = !quoted;
@@ -254,7 +254,7 @@ function parseCsvDocument(input: string): Record<string, string>[] {
       }
       return count;
     });
-    return [",", ";", "\\t"][counts.indexOf(Math.max(...counts))];
+    return [",", ";", "\t"][counts.indexOf(Math.max(...counts))];
   })();
   const rows: string[][] = [];
   let row: string[] = [], field = "", quoted = false;
@@ -265,8 +265,8 @@ function parseCsvDocument(input: string): Record<string, string>[] {
       else quoted = !quoted;
     } else if (char === delimiter && !quoted) {
       row.push(field.trim()); field = "";
-    } else if ((char === "\\n" || char === "\\r") && !quoted) {
-      if (char === "\\r" && source[i + 1] === "\\n") i++;
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && source[i + 1] === "\n") i++;
       row.push(field.trim()); field = "";
       if (row.some(value => value.length)) rows.push(row);
       row = [];
@@ -275,19 +275,23 @@ function parseCsvDocument(input: string): Record<string, string>[] {
   row.push(field.trim());
   if (row.some(value => value.length)) rows.push(row);
   if (rows.length < 2) throw new Error("CSV assurance-vie vide ou non reconnu");
-  const headers = rows[0].map(value => value.trim().toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g, ""));
+  const headers = rows[0].map(value => value.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
   if (!headers.includes("slug") || !headers.includes("contrat")) throw new Error("En-têtes CSV assurance-vie non reconnus");
   return rows.slice(1).map(values => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])));
 }
 
 function nullableNumber(value: string | undefined): number | null {
   if (!value?.trim()) return null;
-  const parsed = Number(value.trim().replace(/\\s/g, "").replace(",", ".").replace("%", ""));
+  const compact = value.trim().replace(/\s/g, "").replace(/%$/, "");
+  const normalized = compact.includes(",") && !compact.includes(".")
+    ? (/,\d{3}$/.test(compact) ? compact.replace(/,/g, "") : compact.replace(",", "."))
+    : compact.replace(/,/g, "");
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 function assuranceVieType(value: string): boolean {
-  const normalized = value.toLowerCase().replace(/[\\s_-]/g, "");
+  const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
   return normalized === "av" || normalized.includes("assurancevie");
 }
 
