@@ -290,9 +290,9 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         diagnostics: {
           htmlLength: firstPage.length,
           summaryMarkerFound: firstPage.includes("ETF_FINDER_SUMMARY"),
-          htmlTableRowCount: (firstPage.match(/<tr\\b/gi) ?? []).length,
+          htmlTableRowCount: (firstPage.match(/<tr\b/gi) ?? []).length,
           title: firstPage.includes("<title") && firstPage.includes("</title>") ? firstPage.slice(firstPage.indexOf("<title"), firstPage.indexOf("</title>") + 8).replace(/<[^>]*>/g, " ").trim() : null,
-          productCountText: firstPage.match(/.{0,100}produit.{0,100}/gi)?.slice(0, 5) ?? [],
+          productCountText: [...firstPage.matchAll(/.{0,100}produit.{0,100}/gi)].slice(-20).map(match => match[0]),
           summaryExcerpt: (() => { const i = firstPage.indexOf("ETF_FINDER_SUMMARY"); return i >= 0 ? firstPage.slice(i, i + 1200) : firstPage.slice(0, 1200); })(),
           scriptSources: [...firstPage.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(match => match[1]).slice(-30),
           apiLikeReferences: [...new Set((firstPage.match(/[^"'\s<>]{0,100}(?:api|graphql|finder|product|fund|etf)[^"'\s<>]{0,160}/gi) ?? []))].slice(0, 40),
