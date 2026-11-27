@@ -297,6 +297,8 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           scriptSources: [...firstPage.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(match => match[1]).slice(-30),
           apiLikeReferences: [...new Set((firstPage.match(/[^"'\s<>]{0,100}(?:api|graphql|finder|product|fund|etf)[^"'\s<>]{0,160}/gi) ?? []))].slice(0, 40),
           widgetConfigReferences: [...firstPage.matchAll(/.{0,100}(?:widgetInstanceID|widgetInstanceId|widget-instance-id).{0,180}/gi)].slice(0, 30).map(match => match[0]),
+          tableExcerpt: (() => { const i = firstPage.indexOf("FinderResultsSection__Datatable"); return i >= 0 ? firstPage.slice(i, i + 12000) : null; })(),
+          tickerExcerpt: (() => { const i = firstPage.indexOf("SP5C FP"); return i >= 0 ? firstPage.slice(i - 1000, i + 5000) : null; })(),
           widgetMarkup: [...firstPage.matchAll(/.{0,100}(?:etf-finder|ETF Finder|etfFinder|widget-instance|widgetInstance).{0,180}/gi)].slice(0, 40).map(match => match[0]),
           widgetScriptDiagnostics: widgetScriptDiagnostics ? {
             status: (widgetScriptDiagnostics as any).status,
