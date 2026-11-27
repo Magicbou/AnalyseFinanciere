@@ -170,7 +170,9 @@ async function getEuronextTrades(request: Request): Promise<Response> {
 }
 
 async function getAmundiCatalog(request: Request): Promise<Response> {
-  const search = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
+  const requestUrl = new URL(request.url);
+  const search = (requestUrl.searchParams.get("q") || "").trim().toLowerCase();
+  const debug = requestUrl.searchParams.get("debug") === "1";
   const headers = {
     Accept: "text/html,application/xhtml+xml",
     "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.5; +catalogue source attribution)",
@@ -265,6 +267,17 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         completenessRule: "Complet uniquement si tous les lots attendus sont récupérés, sans page en échec, et si le nombre d'ISIN distincts égale le total officiel Amundi."
       },
       notice: "Les valeurs liquidatives Amundi sont des valeurs publiées par l'émetteur, pas des cours de marché en temps réel. Les cours de marché sont fournis séparément lorsqu'une source de cotation les publie.",
+      ...(debug ? {
+        diagnostics: {
+          htmlLength: firstPage.length,
+          summaryMarkerFound: firstPage.includes("ETF_FINDER_SUMMARY"),
+          htmlTableRowCount: (firstPage.match(/<tr\\b/gi) ?? []).length,
+          title: firstPage.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1]?.replace(/<[^>]+>/g, " ").trim() ?? null,
+          productCountText: firstPage.match(/.{0,100}produit.{0,100}/gi)?.slice(0, 5) ?? [],
+          summaryExcerpt: (() => { const i = firstPage.indexOf("ETF_FINDER_SUMMARY"); return i >= 0 ? firstPage.slice(i, i + 1200) : firstPage.slice(0, 1200); })(),
+          discoveredPageUrls: pageUrls
+        }
+      } : {}),
       products: filtered
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
   } catch {
