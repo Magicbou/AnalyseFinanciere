@@ -458,7 +458,7 @@ async function getEuronextHistory(request: Request): Promise<Response> {
     || !Number.isFinite(fromTime) || !Number.isFinite(toTime) || fromTime > toTime
     || toTime > Date.parse(today.toISOString().slice(0,10) + "T00:00:00Z")
     || fromTime < Date.parse(defaultFrom.toISOString().slice(0,10) + "T00:00:00Z")) {
-    return json({ status: "invalid_request", message: "La période doit être comprise entre aujourd'hui et les deux dernières années." }, 400);
+    return json({ status: "invalid_request", message: "InvestPilot limite cette première version aux deux dernières années." }, 400);
   }
   const sourceUrl = "https://live.euronext.com/en/popout-page/getHistoricalPrice/" + isin + "-" + market;
   const apiUrl = "https://live.euronext.com/en/ajax/getHistoricalPricePopup/" + isin + "-" + market;
@@ -499,7 +499,7 @@ async function getEuronextHistory(request: Request): Promise<Response> {
     return json({
       status: "ok", source: sourceUrl, sourceName: "Euronext Live · cours historiques ajustés",
       isin, market, from, to, retrievedAt, points, annualReturns,
-      methodology: "Série quotidienne ajustée retournée par Euronext. Fenêtre maximale de deux ans sur ce service public. Les données de marché historiques ne sont pas un flux temps réel."
+      methodology: "Série quotidienne ajustée retournée par Euronext. InvestPilot limite cette première version à deux ans. Les données historiques ne sont pas un flux temps réel."
     }, 200, { "Cache-Control": "public, max-age=21600, s-maxage=21600" });
   } catch (error) {
     return json({ status: "source_unavailable", source: sourceUrl, retrievedAt, points: [],
