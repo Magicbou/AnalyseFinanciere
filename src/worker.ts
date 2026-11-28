@@ -486,6 +486,7 @@ async function getEuronextHistory(request: Request): Promise<Response> {
     const points = parseEuronextHistoryHtml(html);
     if (!points.length) return json({
       status: "no_history", source: sourceUrl, retrievedAt, points: [],
+      upstreamDiagnostics: { contentType: response.headers.get("content-type"), bodyLength: html.length, tableCount: (html.match(/<table\\b/gi) ?? []).length, bodyStart: html.slice(0, 360) },
       message: "Euronext n'a retourné aucun historique exploitable pour cet ISIN et cette place."
     }, 200, { "Cache-Control": "public, max-age=3600, s-maxage=3600" });
     const yearEndByYear = new Map<number, (typeof points)[number]>();
