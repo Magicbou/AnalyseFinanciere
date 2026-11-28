@@ -199,19 +199,19 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     const widgetFunctionHints = [...widgetScriptText.matchAll(/.{0,100}(?:fetch\(|XMLHttpRequest|axios|apiUrl|baseUrl|pageSize|pageNum|totalItems|searchEndpoint).{0,100}/gi)]
       .slice(0, 30).map(match => match[0].replace(/\s+/g, " ").trim().slice(0, 220));
     const widgetTerms = ["getProductsData", "ProductAPI", "ETF_FINDER", "productsSize", "finderAPIResponse", "getProductsData(", "getProductsData:", "getProductsData=", "initFinder", "searchProducts", "domainMap"];
-    const widgetCallSites = ["_Q=", "yQ=", "getContextFromLocalStorage", "productFinder.findProducts", "getProductsData", "countryCode", "userProfileName", "userProfileSlug"].flatMap(term => {
+    const widgetCallSites = ["getContextFromLocalStorage(){", "getContextFromLocalStorage()", "localStorage.setItem", "countryName:", "userProfileName:", "userProfileSlug:", "let At=", "const At=", "At=(()=>", "getProductsData"].flatMap(term => {
       const indexes: number[] = [];
       let from = 0;
-      while (indexes.length < 100) {
+      while (indexes.length < 120) {
         const index = widgetScriptText.indexOf(term, from);
         if (index < 0) break;
         indexes.push(index);
         from = index + term.length;
       }
-      return indexes.slice(-8).map(index => ({
+      return indexes.slice(-6).map(index => ({
         term,
         index,
-        snippet: widgetScriptText.slice(Math.max(0, index - 900), Math.min(widgetScriptText.length, index + 2200))
+        snippet: widgetScriptText.slice(Math.max(0, index - 1200), Math.min(widgetScriptText.length, index + 2800))
       }));
     });
     const finderWidgetMarkup = [...firstPage.matchAll(/<[^>]*(?:etf-finder|finder-widget)[^>]*>/gi)].slice(0, 10).map(match => match[0].slice(0, 3000));
