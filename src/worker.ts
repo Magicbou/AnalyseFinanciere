@@ -469,8 +469,8 @@ async function getAssuranceVieContracts(): Promise<Response> {
       };
     };
     const contracts = assuranceSlugs.map(slug => {
-      const row = feeBySlug.get(slug) ?? {};
-      const euro = euroBySlug.get(slug) ?? {};
+      const row: Record<string, string> = feeBySlug.get(slug) ?? {};
+      const euro: Record<string, string> = euroBySlug.get(slug) ?? {};
       return {
         slug,
         name: row.contrat || euro.contrat || row.slug,
