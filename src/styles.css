@@ -112,3 +112,12 @@
 .history-empty{padding:16px 18px;margin:8px 0;background:#fff;border:1px dashed #d8e0d4;border-radius:8px;color:#7a877d;font-size:11px}
 .insurance-contract-cell .history-toggle{grid-column:2;justify-self:start;margin:2px 0 0;padding:0}
 @media(max-width:600px){.history-chart-panel{padding:13px 10px}.history-chart-heading{flex-direction:column}.history-chart-current{text-align:left}.history-line-chart text,.annual-bar-chart text{font-size:11px}}
+
+
+.history-annual-performance{margin:12px 0 4px;padding:12px 13px;background:#f7faf6;border:1px solid #e8eee5;border-radius:8px}
+.history-annual-performance>strong{display:block;margin-bottom:9px;color:#667468;font-size:10px}
+.history-annual-performance>div{display:flex;gap:8px;flex-wrap:wrap}
+.history-annual-performance>div>span{display:grid;gap:4px;min-width:105px;padding:8px 10px;background:#fff;border:1px solid #e7ece5;border-radius:6px}
+.history-annual-performance b{font-size:10px;color:#7a877d}
+.history-annual-performance strong{font:700 13px Manrope,sans-serif;color:#2f7048}
+.history-annual-performance small{font-size:9px;color:#929b93}
