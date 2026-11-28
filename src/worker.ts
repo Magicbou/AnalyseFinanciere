@@ -265,7 +265,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     const asNumberText = (value: unknown): string | null => {
       if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
       if (typeof value === "string") {
-        const cleaned = value.trim().replace(/[\\s\\u00a0]/g, "").replace(/%$/, "").replace(",", ".");
+        const cleaned = value.trim().replace(/\s/g, "").replace(/%$/, "").replace(",", ".");
         if (!cleaned) return null;
         const parsed = Number(cleaned);
         return Number.isFinite(parsed) ? String(parsed) : null;
