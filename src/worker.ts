@@ -225,8 +225,20 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           userProfileName, status: response.status, responseLength: raw.length,
           responseKeys: data && typeof data === "object" ? Object.keys(data) : [],
           productCount: Array.isArray(data?.products) ? data.products.length : null,
+          productTypeCounts: Array.isArray(data?.products) ? data.products.reduce((counts: Record<string, number>, product: any) => {
+            const type = String(product.productType ?? "UNKNOWN");
+            counts[type] = (counts[type] ?? 0) + 1;
+            return counts;
+          }, {}) : {},
           productKeys: data?.products?.[0] ? Object.keys(data.products[0]) : [],
           characteristicKeys: data?.products?.[0]?.characteristics ? Object.keys(data.products[0].characteristics) : [],
+          sampleProduct: data?.products?.find((product: any) => product.productType === "PRODUCT") ? {
+            productId: data.products.find((product: any) => product.productType === "PRODUCT").productId,
+            productType: data.products.find((product: any) => product.productType === "PRODUCT").productType,
+            characteristics: data.products.find((product: any) => product.productType === "PRODUCT").characteristics,
+            currencies: data.products.find((product: any) => product.productType === "PRODUCT").currencies,
+            metrics: data.products.find((product: any) => product.productType === "PRODUCT").metrics
+          } : null,
           sample: data ? null : raw.slice(0, 500)
         };
       } catch (error) {
