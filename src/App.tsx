@@ -6,7 +6,9 @@ type Page = "overview" | "etfs" | "assurance" | "portfolio" | "sources";
 type Filters = { currency: string; venue: string; sfdr: string; exposure: string };
 type EuronextTrade = { isin:string; status:string; price:string|null; currency?:string; tradeTime?:string; publicationTime?:string; quantity?:string };
 type EuronextResponse = { status:string; source?:string; sourceName?:string; retrievedAt?:string; delayPolicy?:string; results?:EuronextTrade[]; message?:string };
-type AssuranceContract = { slug:string; name:string; insurer:string|null; distributor:string|null; management:string|null; entryFeePct:number|null; ucManagementFeePct:number|null; euroManagementFeePct:number|null; arbitrationFeePct:number|null; supportCount:number|null; etfCount:number|null; scpiCount:number|null; minimumInitialEur:number|null; euroFund:string|null; euroRate2025Pct:number|null; euroRate2024Pct:number|null; euroRate2023Pct:number|null; feeCheckedAt:string|null; rateCheckedAt:string|null; contractSourceUrl:string|null; rateSourceUrl:string|null; detailUrl:string|null };
+type AssuranceSortPeriod = "1" | "3" | "5" | "8";
+type AssurancePerformance = { annualizedPct:number|null; cumulativePct:number|null; years:number; fromYear:number; toYear:number; observations:number };
+type AssuranceContract = { slug:string; name:string; insurer:string|null; distributor:string|null; management:string|null; entryFeePct:number|null; ucManagementFeePct:number|null; euroManagementFeePct:number|null; arbitrationFeePct:number|null; supportCount:number|null; etfCount:number|null; scpiCount:number|null; minimumInitialEur:number|null; euroFund:string|null; euroRate2025Pct:number|null; euroRate2024Pct:number|null; euroRate2023Pct:number|null; euroPerformance:Record<AssuranceSortPeriod,AssurancePerformance>; feeCheckedAt:string|null; rateCheckedAt:string|null; contractSourceUrl:string|null; rateSourceUrl:string|null; detailUrl:string|null };
 type AssuranceResponse = { status:string; sourceName?:string; retrievedAt?:string; sourceLicense?:string; sourceUrls?:{fees:string;euroRates:string}; methodology?:string; rateDefinition?:string; contractCount?:number; contracts?:AssuranceContract[]; message?:string };
 const emptyFilters: Filters = { currency: "Toutes", venue: "Toutes", sfdr: "Toutes", exposure: "Toutes" };
 
@@ -53,6 +55,7 @@ function App() {
   const [assuranceLoading, setAssuranceLoading] = useState(false);
   const [assuranceError, setAssuranceError] = useState<string|null>(null);
   const [assuranceSearch, setAssuranceSearch] = useState("");
+  const [assuranceSortPeriod, setAssuranceSortPeriod] = useState<AssuranceSortPeriod>("5");
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void refreshAll(); }, []);
   useEffect(() => { localStorage.setItem("investpilot.manualEtfs", JSON.stringify(manualProducts)); }, [manualProducts]);
@@ -106,6 +109,17 @@ function App() {
     } finally { setRefreshing(false); }
   };
   useEffect(() => { if (page === "etfs" && catalog === null && !loading && !catalogError) void loadCatalog(); if (page === "assurance" && assuranceData === null && !assuranceLoading && !assuranceError) void loadAssuranceVie(); }, [page]);
+
+  const filteredAssuranceContracts = useMemo(() => (assuranceData?.contracts ?? [])
+    .filter(contract => [contract.name, contract.insurer, contract.distributor].some(value => value?.toLocaleLowerCase("fr-FR").includes(assuranceSearch.toLocaleLowerCase("fr-FR"))))
+    .sort((left, right) => {
+      const leftValue = left.euroPerformance?.[assuranceSortPeriod]?.annualizedPct ?? null;
+      const rightValue = right.euroPerformance?.[assuranceSortPeriod]?.annualizedPct ?? null;
+      if (leftValue === null && rightValue === null) return left.name.localeCompare(right.name, "fr");
+      if (leftValue === null) return 1;
+      if (rightValue === null) return -1;
+      return rightValue - leftValue;
+    }), [assuranceData, assuranceSearch, assuranceSortPeriod]);
 
   const products = useMemo(() => {
     const official = catalog?.products ?? [];
@@ -180,14 +194,14 @@ function App() {
   ];
 
   const todayLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
-  const appVersion = "0.5.1";
+  const appVersion = "0.5.2";
 
   return <main className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={e=>{e.preventDefault();window.location.hash="overview";setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
       <div className="workspace-label">ESPACE PERSONNEL</div>
       <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>{window.location.hash=id;setPage(id);}}><Icon size={18}/>{label}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.5.0 · EN CONSTRUCTION</span></div>
+      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.5.2</span></div>
     </aside>
     <section className="main-content">
       <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="assurance"?"COMPARATEUR DE CONTRATS":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="assurance"?"Comparer les assurances-vie":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><button className="secondary-button" onClick={()=>void refreshAll()} disabled={refreshing} title="Actualiser toutes les sources disponibles"><RefreshCw size={15} className={refreshing?"spin":""}/>{refreshing?"Actualisation…":"Actualiser les données"}</button><span className="status-dot"/>{refreshing?"Synchronisation en cours":lastRefreshAt?`Actualisé à ${new Date(lastRefreshAt).toLocaleTimeString("fr-FR")}`:catalog?"Catalogue source accessible":"Sources en attente"}<span className="avatar">P</span></div></header>
@@ -261,11 +275,31 @@ function App() {
         <div className="catalog-toolbar"><div className="search-field"><Search size={17}/><input aria-label="Rechercher un contrat d'assurance-vie" placeholder="Contrat, assureur ou courtier…" value={assuranceSearch} onChange={e=>setAssuranceSearch(e.target.value)}/>{assuranceSearch&&<button className="clear-search" onClick={()=>setAssuranceSearch("")} aria-label="Effacer">×</button>}</div><button className="secondary-button" onClick={()=>void loadAssuranceVie()} disabled={assuranceLoading}><RefreshCw size={15} className={assuranceLoading?"spin":""}/> Actualiser</button></div>
         {assuranceLoading&&<div className="catalog-message"><RefreshCw className="spin" size={18}/> Chargement des fichiers publics…</div>}
         {assuranceError&&<div className="catalog-error"><CircleAlert size={18}/><span>{assuranceError}</span><button onClick={()=>void loadAssuranceVie()}>Réessayer</button></div>}
-        {assuranceData?.contracts&&<><div className="catalog-summary"><div><strong>{assuranceData.contracts.filter(c=>[c.name,c.insurer,c.distributor].some(v=>v?.toLowerCase().includes(assuranceSearch.toLowerCase()))).length} contrats affichés</strong><span> · Assurance-vie uniquement, PER exclus</span></div><span className="data-status verified"><i/>Sources ouvertes</span></div>
+        {assuranceData?.contracts&&<><div className="catalog-summary"><div><strong>{filteredAssuranceContracts.length} contrats affichés sur {assuranceData.contractCount}</strong><span> · Tous les contrats d'assurance-vie référencés, ETF non requis · PER exclus</span></div><span className="data-status verified"><i/>Sources ouvertes</span></div>
+          <section className="insurance-performance-panel">
+            <div className="insurance-performance-heading"><div><span className="eyebrow">CLASSEMENT DES PERFORMANCES</span><h3>Fonds euros · classement par rendement</h3><p>Choisis l'horizon pour trier les contrats du meilleur au moins performant. Les quatre horizons restent visibles dans le tableau.</p></div><div className="insurance-period-switch" aria-label="Horizon de classement">{(["1","3","5","8"] as AssuranceSortPeriod[]).map(period=><button key={period} className={assuranceSortPeriod===period?"active":""} onClick={()=>setAssuranceSortPeriod(period)}>{period} an{period==="1"?"":"s"}</button>)}</div></div>
+            <div className="insurance-performance-note">Rendement annualisé composé (CAGR), calculé à partir des taux annuels nets de frais de gestion du contrat et bruts de prélèvements sociaux. Dernière année publiée : {assuranceData.performanceEndYear??2025}. Les contrats sans fonds euros ou sans historique complet restent dans la liste, en bas, avec « n.c. ».</div>
+            <div className="insurance-performance-table">
+              <div className="insurance-performance-head"><span>RANG / CONTRAT / FONDS EUROS</span>{(["1","3","5","8"] as AssuranceSortPeriod[]).map(period=><span className={assuranceSortPeriod===period?"sorted-period":""} key={period}>{period} AN{period==="1"?"":"S"}</span>)}</div>
+              {filteredAssuranceContracts.map((contract,index)=>{
+                const selected=contract.euroPerformance?.[assuranceSortPeriod];
+                const ranked=selected?.annualizedPct!==null && selected?.annualizedPct!==undefined;
+                return <div className="insurance-performance-row" key={contract.slug}>
+                  <span className="insurance-contract-cell"><b>{ranked?index+1:"—"}</b><strong>{contract.name}</strong><small>{contract.insurer??"Assureur non renseigné"}{contract.distributor?" · "+contract.distributor:""} · {contract.euroFund??"Fonds euros non référencé"}</small><small>{contract.etfCount??"n.c."} ETF · {contract.supportCount??"n.c."} supports · {contract.management??"Gestion non précisée"}</small></span>
+                  {(["1","3","5","8"] as AssuranceSortPeriod[]).map(period=>{
+                    const result=contract.euroPerformance?.[period];
+                    return <span className={assuranceSortPeriod===period?"sorted-period":""} key={period}>{result?.annualizedPct===null||result?.annualizedPct===undefined?"n.c.":<><strong>{result.annualizedPct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} % / an</strong><small>{result.cumulativePct===null?"":result.cumulativePct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" % cumulés"}</small></>}</span>;
+                  })}
+                </div>;
+              })}
+              {filteredAssuranceContracts.length===0&&<div className="catalog-message">Aucun contrat ne correspond à cette recherche.</div>}
+            </div>
+          </section>
+          <div className="catalog-summary"><strong>Frais et caractéristiques des contrats</strong><span className="muted small">Les données ETF et supports sont informatives, jamais un filtre</span></div>
           <div className="catalog-table-wrap insurance-table"><div className="insurance-table-head"><span>CONTRAT / ASSUREUR</span><span>FRAIS VERSEMENT</span><span>GESTION UC</span><span>GESTION €</span><span>ARBITRAGE</span><span>FONDS € 2025</span><span>ETF / SUPPORTS</span><span>MINIMUM</span></div>
-          {assuranceData.contracts.filter(c=>[c.name,c.insurer,c.distributor].some(v=>v?.toLowerCase().includes(assuranceSearch.toLowerCase()))).map(c=><div className="insurance-row" key={c.slug}><span><strong>{c.name}</strong><small>{c.insurer??"Assureur non renseigné"}{c.distributor?" · "+c.distributor:""}</small><small>Frais vérifiés : {c.feeCheckedAt??"n.c."} · Taux vérifié : {c.rateCheckedAt??"n.c."}</small><small>{c.contractSourceUrl&&<a href={c.contractSourceUrl} target="_blank" rel="noreferrer">Source tarif</a>} {c.rateSourceUrl&&<a href={c.rateSourceUrl} target="_blank" rel="noreferrer">Source taux</a>}</small></span><span>{c.entryFeePct===null?"n.c.":c.entryFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.ucManagementFeePct===null?"n.c.":c.ucManagementFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.euroManagementFeePct===null?"n.c.":c.euroManagementFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.arbitrationFeePct===null?"n.c.":c.arbitrationFeePct.toLocaleString("fr-FR")+" %"}</span><span className="nav-value">{c.euroRate2025Pct===null?"2025 : n.c.":"2025 : "+c.euroRate2025Pct.toLocaleString("fr-FR")+" %"}<small>{c.euroRate2024Pct===null?"2024 : n.c.":"2024 : "+c.euroRate2024Pct.toLocaleString("fr-FR")+" %"} · {c.euroFund??"Fonds non précisé"}</small></span><span>{c.etfCount===null?"n.c.":c.etfCount} ETF / {c.supportCount===null?"n.c.":c.supportCount}</span><span>{c.minimumInitialEur===null?"n.c.":c.minimumInitialEur.toLocaleString("fr-FR")+" €"}</span></div>)}
+          {filteredAssuranceContracts.map(c=><div className="insurance-row" key={c.slug}><span><strong>{c.name}</strong><small>{c.insurer??"Assureur non renseigné"}{c.distributor?" · "+c.distributor:""}</small><small>Frais vérifiés : {c.feeCheckedAt??"n.c."} · Taux vérifié : {c.rateCheckedAt??"n.c."}</small><small>{c.contractSourceUrl&&<a href={c.contractSourceUrl} target="_blank" rel="noreferrer">Source tarif</a>} {c.rateSourceUrl&&<a href={c.rateSourceUrl} target="_blank" rel="noreferrer">Source taux</a>}</small></span><span>{c.entryFeePct===null?"n.c.":c.entryFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.ucManagementFeePct===null?"n.c.":c.ucManagementFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.euroManagementFeePct===null?"n.c.":c.euroManagementFeePct.toLocaleString("fr-FR")+" %"}</span><span>{c.arbitrationFeePct===null?"n.c.":c.arbitrationFeePct.toLocaleString("fr-FR")+" %"}</span><span className="nav-value">{c.euroRate2025Pct===null?"2025 : n.c.":"2025 : "+c.euroRate2025Pct.toLocaleString("fr-FR")+" %"}<small>{c.euroRate2024Pct===null?"2024 : n.c.":"2024 : "+c.euroRate2024Pct.toLocaleString("fr-FR")+" %"} · {c.euroFund??"Fonds non précisé"}</small></span><span>{c.etfCount===null?"n.c.":c.etfCount} ETF / {c.supportCount===null?"n.c.":c.supportCount}</span><span>{c.minimumInitialEur===null?"n.c.":c.minimumInitialEur.toLocaleString("fr-FR")+" €"}</span></div>)}
           </div>
-          <div className="catalog-footnote"><p>Les taux fonds euros 2025 sont nets des frais de gestion du contrat et bruts des prélèvements sociaux ; ils excluent les bonus conditionnels. Ils ne constituent pas des cours boursiers. Les unités de compte n'ont pas de valeur unique par contrat : leur valeur doit être consultée support par support et par ISIN.</p><p>{assuranceData.methodology} Licence : {assuranceData.sourceLicense}. Collecte InvestPilot : {new Date(assuranceData.retrievedAt??"").toLocaleString("fr-FR")}.</p><p>Sources : <a href={assuranceData.sourceUrls?.fees} target="_blank" rel="noreferrer">frais des contrats</a> · <a href={assuranceData.sourceUrls?.euroRates} target="_blank" rel="noreferrer">taux fonds euros</a> · <a href="https://www.data.gouv.fr/" target="_blank" rel="noreferrer">data.gouv.fr</a>. Les dates de vérification des lignes et les sources des assureurs sont disponibles dans les jeux de données d'origine.</p></div>
+          <div className="catalog-footnote"><p>Les performances classées ici concernent exclusivement les fonds euros, pas les unités de compte ni la performance d'un mandat piloté. Les taux annuels sources sont nets des frais de gestion du contrat et bruts des prélèvements sociaux ; bonus conditionnels exclus. Les UC doivent être comparées support par support et par ISIN, avec leur propre historique.</p><p>{assuranceData.methodology} Licence : {assuranceData.sourceLicense}. Collecte InvestPilot : {new Date(assuranceData.retrievedAt??"").toLocaleString("fr-FR")}.</p><p>Sources : <a href={assuranceData.sourceUrls?.fees} target="_blank" rel="noreferrer">frais des contrats</a> · <a href={assuranceData.sourceUrls?.euroRates} target="_blank" rel="noreferrer">historique des taux fonds euros</a> · <a href="https://www.data.gouv.fr/" target="_blank" rel="noreferrer">data.gouv.fr</a>. Les dates de vérification et les sources des assureurs sont disponibles dans les jeux de données d'origine.</p></div>
         </>}
       </section>}
       {page==="portfolio"&&<section className="placeholder-page"><Wallet size={24}/><h2>Suivi du portefeuille</h2><p>Cette section sera activée avec l'import des positions et le rapprochement des ISIN.</p></section>}
