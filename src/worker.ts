@@ -175,7 +175,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     countryCode: "FRA",
     languageName: "French",
     languageCode: "fr",
-    userProfileName: "RETAIL",
+    userProfileName: "INSTIT",
     bcp47Code: "fr-FR"
   };
   const characteristics = [
@@ -405,7 +405,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       audit: {
         apiProductRecords: allProducts.length,
         activeProductRecords: activeProducts.length,
-        excludedByFranceRetailVisibility: activeProducts.length - visibleProducts.length,
+        excludedByFranceInstitutionalVisibility: activeProducts.length - visibleProducts.length,
         visibleProductRecords: visibleProducts.length,
         uniqueVisibleIsinCount: uniqueProducts.length,
         missingNavCount: uniqueProducts.filter(product => !product.nav).length,
@@ -423,7 +423,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         country: context.countryName,
         countryCode: context.countryCode,
         profile: context.userProfileName,
-        completenessRule: "Catalogue complet si tous les produits actifs visibles pour le contexte France/RETAIL ont un ISIN valide et qu'aucun ISIN n'est dupliqué."
+        completenessRule: "Catalogue complet si tous les produits actifs visibles pour le contexte France/INSTIT ont un ISIN valide et qu'aucun ISIN n'est dupliqué."
       },
       notice: "Données issues de l'API officielle Amundi. Les valeurs liquidatives et performances sont celles publiées par l'émetteur, avec leur date propre ; elles ne constituent pas des cours de marché en temps réel.",
       products: filtered
