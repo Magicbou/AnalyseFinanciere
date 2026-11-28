@@ -230,6 +230,10 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
             counts[type] = (counts[type] ?? 0) + 1;
             return counts;
           }, {}) : {},
+          activeProductCount: Array.isArray(data?.products) ? data.products.filter((product: any) => product.productType === "PRODUCT").length : null,
+          uniqueIsinCount: Array.isArray(data?.products) ? new Set(data.products.filter((product: any) => product.productType === "PRODUCT").map((product: any) => String(product.characteristics?.ISIN ?? "").trim().toUpperCase()).filter(Boolean)).size : null,
+          missingIsinCount: Array.isArray(data?.products) ? data.products.filter((product: any) => product.productType === "PRODUCT" && !product.characteristics?.ISIN).length : null,
+          hiddenForFranceInstitCount: Array.isArray(data?.products) ? data.products.filter((product: any) => product.productType === "PRODUCT" && Array.isArray(product.characteristics?.VISIBILITY_EXCEPTIONS) && product.characteristics.VISIBILITY_EXCEPTIONS.some((exception: any) => exception.countryCode === "FRA" && exception.userProfileName === "INSTIT")).length : null,
           productKeys: data?.products?.[0] ? Object.keys(data.products[0]) : [],
           characteristicKeys: data?.products?.[0]?.characteristics ? Object.keys(data.products[0].characteristics) : [],
           sampleProduct: data?.products?.find((product: any) => product.productType === "PRODUCT") ? {
