@@ -5,8 +5,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("Euronext historical ETF prices", () => {
   it("retrieves and parses adjusted daily history for an ISIN and Euronext market", async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    const previous = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const today = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const previous = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
     const currentYear = new Date().getUTCFullYear();
     const priorYearEnd = (currentYear - 1) + "-12-31";
     const yearBeforeEnd = (currentYear - 2) + "-12-31";
@@ -24,7 +24,7 @@ describe("Euronext historical ETF prices", () => {
     const upstream = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.method).toBe("POST");
       expect(String(init?.body)).toContain("adjusted=Y");
-      expect(String(init?.body)).toContain("nbSession=520");
+      expect(String(init?.body)).toContain("nbSession=10");
       return new Response(html, { status: 200, headers: { "Content-Type": "text/html" } });
     });
     vi.stubGlobal("fetch", upstream);
