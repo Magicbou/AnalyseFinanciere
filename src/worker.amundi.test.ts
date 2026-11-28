@@ -25,8 +25,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Amundi catalogue Worker integration", () => {
   it("fetches every numbered page and returns all 654 distinct ISINs", async () => {
     const calls: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
+      if (init?.method === "POST") return new Response(JSON.stringify({ products: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
       calls.push(url.toString());
       if (url.origin !== new URL(source).origin || url.pathname !== new URL(source).pathname) {
         return new Response("unexpected upstream", { status: 404 });
@@ -63,7 +64,9 @@ describe("Amundi catalogue Worker integration", () => {
 
   it("marks the catalogue partial when Amundi repeats the first page for every pager URL", async () => {
     const firstPage = cataloguePage(0, 50, true);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(firstPage, { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === "POST"
+      ? new Response(JSON.stringify({ products: [] }), { status: 200, headers: { "Content-Type": "application/json" } })
+      : new Response(firstPage, { status: 200 })));
 
     const response = await worker.fetch(
       new Request("https://investpilot.test/api/catalog/amundi"),
