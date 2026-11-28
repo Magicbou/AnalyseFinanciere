@@ -199,10 +199,10 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     const widgetFunctionHints = [...widgetScriptText.matchAll(/.{0,100}(?:fetch\(|XMLHttpRequest|axios|apiUrl|baseUrl|pageSize|pageNum|totalItems|searchEndpoint).{0,100}/gi)]
       .slice(0, 30).map(match => match[0].replace(/\s+/g, " ").trim().slice(0, 220));
     const widgetTerms = ["getProductsData", "ProductAPI", "ETF_FINDER", "productsSize", "finderAPIResponse", "getProductsData(", "getProductsData:", "getProductsData=", "initFinder", "searchProducts", "domainMap"];
-    const widgetCallSites = ["getProductsData", "finderAPIResponse", "productsSize", "findProducts(", "setETFFinderData", "generateForkJoinRequest", "products:this.productApiService.getProductsData"].flatMap(term => {
+    const widgetCallSites = ["getProductsData", "finderAPIResponse", "productsSize", "findProducts(", "setETFFinderData", "generateForkJoinRequest", "products:this.productApiService.getProductsData", "new TA(", "PersistETFFinderResponse"].flatMap(term => {
       const snippets: string[] = [];
       let from = 0;
-      while (snippets.length < 18) {
+      while (snippets.length < 40) {
         const index = widgetScriptText.indexOf(term, from);
         if (index < 0) break;
         snippets.push(widgetScriptText.slice(Math.max(0, index - 1800), Math.min(widgetScriptText.length, index + 2600)));
@@ -210,6 +210,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       }
       return snippets.map(snippet => ({ term, snippet }));
     });
+    const finderWidgetMarkup = [...firstPage.matchAll(/<[^>]*(?:etf-finder|finder-widget)[^>]*>/gi)].slice(0, 10).map(match => match[0].slice(0, 3000));
     const widgetTermSnippets = widgetTerms.map(term => {
       const index = widgetScriptText.indexOf(term);
       return index < 0 ? null : { term, snippet: widgetScriptText.slice(Math.max(0, index - 220), index + 520) };
@@ -286,6 +287,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         widgetApiStrings,
         widgetTermSnippets,
         widgetCallSites,
+        finderWidgetMarkup,
         widgetFunctionHints,
         sourceHtmlLength: firstPage.length,
         sourceScriptUrls: [...firstPage.matchAll(/<script\b[^>]*src=["']([^"']+)["']/gi)]
