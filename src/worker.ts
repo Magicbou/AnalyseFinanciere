@@ -731,7 +731,7 @@ async function getAssuranceVieContracts(env: Env): Promise<Response> {
       performanceEndYear,
       rateDefinition: "Taux du fonds euros nets des frais de gestion du contrat et bruts des prélèvements sociaux ; bonus conditionnels non inclus.",
       contractCount: contracts.length,
-      history: { layer: 'euro_fund', status: historyStatus, storedRows: historyStored, endpoint: '/api/assurance-vie/history?slug={contract_slug}' },
+      history: { layer: 'euro_fund', status: historyStatus, processedRows: historyStored, endpoint: '/api/assurance-vie/history?slug={contract_slug}' },
       contracts
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
   } catch (error) {
