@@ -263,8 +263,23 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       return "";
     };
     const asNumberText = (value: unknown): string | null => {
-      if (typeof value !== "number" || !Number.isFinite(value)) return null;
-      return String(value);
+      if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
+      if (typeof value === "string") {
+        const cleaned = value.trim().replace(/[\\s\\u00a0]/g, "").replace(/%$/, "").replace(",", ".");
+        if (!cleaned) return null;
+        const parsed = Number(cleaned);
+        return Number.isFinite(parsed) ? String(parsed) : null;
+      }
+      if (value && typeof value === "object") {
+        const record = value as Record<string, unknown>;
+        for (const key of ["value", "amount", "number", "numericValue", "rawValue", "displayValue", "formattedValue"]) {
+          if (record[key] !== undefined && record[key] !== value) {
+            const parsed = asNumberText(record[key]);
+            if (parsed !== null) return parsed;
+          }
+        }
+      }
+      return null;
     };
     const formatDate = (value: unknown): string | null => {
       if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
@@ -286,10 +301,32 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         || asText(listings.DEU)
         || asText(Object.values(listings)[0])
         || asText(data.MNEMO);
-      const productMetrics = product.metrics ?? [];
+      const productMetrics = Array.isArray(product.metrics) ? product.metrics : [];
       const performance = (period: string) => {
-        const value = productMetrics.find(item => item.indicator === "PERFORMANCE" && item.period === period)?.value;
-        return asNumberText(value);
+        const aliases: Record<string, string[]> = {
+          YEAR_TO_DATE: ["YEAR_TO_DATE", "YTD", "YTD_PERFORMANCE"],
+          ONE_YEAR: ["ONE_YEAR", "1_YEAR", "1Y", "ONE_YEAR_PERFORMANCE"],
+          THREE_YEARS: ["THREE_YEARS", "3_YEARS", "3Y", "THREE_YEARS_PERFORMANCE"],
+          FIVE_YEARS: ["FIVE_YEARS", "5_YEARS", "5Y", "FIVE_YEARS_PERFORMANCE"],
+          TEN_YEARS: ["TEN_YEARS", "10_YEARS", "10Y", "TEN_YEARS_PERFORMANCE"]
+        };
+        const acceptedPeriods = aliases[period] ?? [period];
+        const metric = productMetrics.find(item =>
+          String(item.indicator ?? "").toUpperCase() === "PERFORMANCE"
+          && acceptedPeriods.includes(String(item.period ?? "").toUpperCase())
+        ) as Record<string, unknown> | undefined;
+        const metricValue = metric?.value ?? metric?.values ?? metric?.performance ?? metric?.result;
+        const directValue = asNumberText(metricValue);
+        if (directValue !== null) return directValue;
+        const characteristicKeys = [
+          `PERFORMANCE_${period}`, `PERF_${period}`, period,
+          ...acceptedPeriods.map(alias => `PERFORMANCE_${alias}`)
+        ];
+        for (const key of characteristicKeys) {
+          const parsed = asNumberText(data[key]);
+          if (parsed !== null) return parsed;
+        }
+        return null;
       };
       const exposure = asText(data.INVESTMENT_ZONE)
         || asText(data.ETF_CLASSIFICATION2)
