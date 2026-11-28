@@ -384,6 +384,119 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
   }
 }
 
+
+const EURONEXT_HISTORY_MARKETS = new Set(["XPAR", "XAMS", "XBRU", "XDUB", "XLIS", "XMIL", "XOSL"]);
+
+function decodeHtmlText(value: string): string {
+  return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, " ").trim();
+}
+
+function parseMarketNumber(value: string): number | null {
+  let normalized = value.replace(/[\s\u00a0]/g, "").replace(/[^\d,.-]/g, "");
+  if (!normalized || normalized === "-" || normalized === "—") return null;
+  const comma = normalized.lastIndexOf(",");
+  const dot = normalized.lastIndexOf(".");
+  if (comma >= 0 && dot >= 0) {
+    normalized = comma > dot ? normalized.replace(/\./g, "").replace(",", ".") : normalized.replace(/,/g, "");
+  } else if (comma >= 0) {
+    normalized = normalized.replace(",", ".");
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseEuronextHistoryHtml(html: string) {
+  const table = html.match(/<table\b[^>]*>([\s\S]*?)<\/table>/i)?.[1];
+  if (!table) return [];
+  const rows = [...table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(match =>
+    [...match[1].matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)].map(cell => decodeHtmlText(cell[1]))
+  ).filter(row => row.length > 1);
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(value => value.toLocaleLowerCase("en").replace(/[^a-z]/g, ""));
+  const column = (...names: string[]) => headers.findIndex(header => names.includes(header));
+  const dateIndex = column("date");
+  const closeIndex = column("close", "last", "price");
+  const openIndex = column("open");
+  const highIndex = column("high");
+  const lowIndex = column("low");
+  const volumeIndex = column("numberofshares", "volume");
+  if (dateIndex < 0 || closeIndex < 0) return [];
+  return rows.slice(1).flatMap(row => {
+    const rawDate = row[dateIndex] ?? "";
+    const dateMatch = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const date = dateMatch ? dateMatch[3] + "-" + dateMatch[2].padStart(2,"0") + "-" + dateMatch[1].padStart(2,"0") : rawDate;
+    const close = parseMarketNumber(row[closeIndex] ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || close === null || close <= 0) return [];
+    return [{
+      date, close,
+      open: openIndex < 0 ? null : parseMarketNumber(row[openIndex] ?? ""),
+      high: highIndex < 0 ? null : parseMarketNumber(row[highIndex] ?? ""),
+      low: lowIndex < 0 ? null : parseMarketNumber(row[lowIndex] ?? ""),
+      volume: volumeIndex < 0 ? null : parseMarketNumber(row[volumeIndex] ?? "")
+    }];
+  }).sort((a,b) => a.date.localeCompare(b.date));
+}
+
+async function getEuronextHistory(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const isin = (url.searchParams.get("isin") ?? "").trim().toUpperCase();
+  const market = (url.searchParams.get("market") ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin) || !EURONEXT_HISTORY_MARKETS.has(market)) {
+    return json({ status: "invalid_request", message: "ISIN ou code de marché Euronext invalide." }, 400);
+  }
+  const today = new Date();
+  const to = url.searchParams.get("to") ?? today.toISOString().slice(0,10);
+  const defaultFrom = new Date(today);
+  defaultFrom.setUTCFullYear(defaultFrom.getUTCFullYear() - 2);
+  const from = url.searchParams.get("from") ?? defaultFrom.toISOString().slice(0,10);
+  const fromTime = Date.parse(from + "T00:00:00Z");
+  const toTime = Date.parse(to + "T00:00:00Z");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)
+    || !Number.isFinite(fromTime) || !Number.isFinite(toTime) || fromTime > toTime
+    || toTime > Date.parse(today.toISOString().slice(0,10) + "T00:00:00Z")
+    || fromTime < Date.parse(defaultFrom.toISOString().slice(0,10) + "T00:00:00Z")) {
+    return json({ status: "invalid_request", message: "La période doit être comprise entre aujourd'hui et les deux dernières années." }, 400);
+  }
+  const sourceUrl = "https://live.euronext.com/en/popout-page/getHistoricalPrice/" + isin + "-" + market;
+  const apiUrl = "https://live.euronext.com/en/ajax/getHistoricalPricePopup/" + isin + "-" + market;
+  const retrievedAt = new Date().toISOString();
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        Accept: "*/*",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: sourceUrl,
+        "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.6)"
+      },
+      body: new URLSearchParams({ adjusted: "Y", startdate: from, enddate: to, nbSession: "520" })
+    });
+    if (!response.ok) return json({
+      status: "source_unavailable", source: sourceUrl, retrievedAt,
+      upstreamStatus: response.status, points: [],
+      message: "L'historique Euronext n'est pas accessible pour cette cotation. Aucun cours de remplacement n'est affiché."
+    }, 502);
+    const html = await response.text();
+    const points = parseEuronextHistoryHtml(html);
+    if (!points.length) return json({
+      status: "no_history", source: sourceUrl, retrievedAt, points: [],
+      message: "Euronext n'a retourné aucun historique exploitable pour cet ISIN et cette place."
+    }, 200, { "Cache-Control": "public, max-age=3600, s-maxage=3600" });
+    return json({
+      status: "ok", source: sourceUrl, sourceName: "Euronext Live · cours historiques ajustés",
+      isin, market, from, to, retrievedAt, points,
+      methodology: "Série quotidienne ajustée retournée par Euronext. Fenêtre maximale de deux ans sur ce service public. Les données de marché historiques ne sont pas un flux temps réel."
+    }, 200, { "Cache-Control": "public, max-age=21600, s-maxage=21600" });
+  } catch (error) {
+    return json({ status: "source_unavailable", source: sourceUrl, retrievedAt, points: [],
+      message: error instanceof Error ? error.message : "Erreur de lecture de l'historique Euronext." }, 502);
+  }
+}
+
 const INSURANCE_FEES_CSV = "https://www.data.gouv.fr/api/1/datasets/r/3a1608bf-25e2-421f-bbd5-e46ae42256ab";
 const INSURANCE_EURO_CSV = "https://www.data.gouv.fr/api/1/datasets/r/d6c8853b-b38e-4aa3-a119-4cb7935429a6";
 
@@ -495,6 +608,10 @@ async function getAssuranceVieContracts(): Promise<Response> {
         euroRate2025Pct: nullableNumber(euro.taux_2025_pct),
         euroRate2024Pct: nullableNumber(euro.taux_2024_pct),
         euroRate2023Pct: nullableNumber(euro.taux_2023_pct),
+        annualRates: Array.from({ length: performanceEndYear - 2015 + 1 }, (_, index) => {
+          const year = 2015 + index;
+          return { year, ratePct: nullableNumber(euro["taux_" + year + "_pct"]) };
+        }),
         euroPerformance: {
           "1": buildEuroPerformance(euro, 1),
           "3": buildEuroPerformance(euro, 3),
@@ -540,12 +657,13 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       if (request.method !== "GET") return json({ status: "method_not_allowed" }, 405, { Allow: "GET" });
       if (url.pathname === "/api/health") {
-        return json({ status: "ok", service: "investpilot-api", version: "0.5.3", timestamp: new Date().toISOString() });
+        return json({ status: "ok", service: "investpilot-api", version: "0.6.0", timestamp: new Date().toISOString() });
       }
       if (url.pathname === "/api/catalog/amundi") return getAmundiCatalog(request);
       if (url.pathname === "/api/market/fx") return getEcbFx();
       if (url.pathname === "/api/assurance-vie/contracts") return getAssuranceVieContracts();
       if (url.pathname === "/api/market/euronext") return getEuronextTrades(request);
+      if (url.pathname === "/api/market/history") return getEuronextHistory(request);
       return json({ status: "not_found", path: url.pathname }, 404);
     }
     return env.ASSETS.fetch(request);
