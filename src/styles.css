@@ -121,3 +121,11 @@
 .history-annual-performance b{font-size:10px;color:#7a877d}
 .history-annual-performance strong{font:700 13px Manrope,sans-serif;color:#2f7048}
 .history-annual-performance small{font-size:9px;color:#929b93}
+
+/* Statut de certification des données ETF : toujours un libellé texte, pas uniquement une couleur. */
+.source-status-cell{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.certification-label{display:inline-flex;align-items:center;gap:6px;width:max-content;max-width:100%;padding:5px 8px;border-radius:6px;font-size:9px;font-weight:700;line-height:1.25;white-space:normal}
+.certification-label i{width:7px;height:7px;flex:none;border-radius:50%;background:currentColor}
+.certification-partial{color:#8a5a08;background:#fff2d6;border:1px solid #f0d59a}
+.certification-unverified{color:#a23e35;background:#fff0ed;border:1px solid #edc3bc}
+.certification-verified{color:#286b43;background:#eaf6ed;border:1px solid #b8dfc2}
