@@ -13,6 +13,14 @@ describe("Amundi public catalogue parser", () => {
     expect(product.name).toContain("S&P 500");
   });
   it("recognizes the official result count format", () => expect(extractAmundiTotal("<span>654 produit(s)trouvé(s)</span>")).toBe(654));
+  it.each([
+    ["654 produit(s)trouvé(s)", 654],
+    ["<span><strong>654</strong></span> <span>produit(s)</span><span>trouvé(s)</span>", 654],
+    ["654&nbsp;produit(s)&nbsp;trouvé(s)", 654],
+    ["<div class=\"count\">1 234</div><span>produits trouvés</span>", 1234]
+  ])("extracts the visible official total from HTML: %s", (html, expected) => {
+    expect(extractAmundiTotal(html)).toBe(expected);
+  });
   it("counts unique products by ISIN, not multiple exchange listings", () => {
     expect(countUniqueAmundiProducts([
       { isin: "LU1135865084" }, { isin: "lu1135865084" }, { isin: "IE000BI8OT95" }, { isin: "" }
