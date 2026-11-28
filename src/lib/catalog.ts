@@ -14,18 +14,18 @@ export type AmundiCatalogResponse = {
   listingCount?: number; returnedCount?: number; pageCount?: number;
   completeness?: "complete" | "partial";
   audit?: {
-    officialProductTotal: number | null;
-    uniqueIsinCount: number;
-    parsedListingCount: number;
-    uniqueListingCount: number;
-    duplicateListingRows: number;
-    discoveredAdditionalPages: number;
-    fetchedPages: number;
-    failedPages: number;
+    apiProductRecords: number;
+    activeProductRecords: number;
+    excludedByFranceInstitutionalVisibility: number;
+    visibleProductRecords: number;
+    uniqueVisibleIsinCount: number;
+    missingIsinCount: number;
+    duplicateIsinCount: number;
     missingNavCount: number;
     navWithoutPublicationDateCount: number;
-    oldestNavDate: string | null;
-    newestNavDate: string | null;
+    country: string;
+    countryCode: string;
+    profile: string;
     completenessRule: string;
   };
   notice?: string;
