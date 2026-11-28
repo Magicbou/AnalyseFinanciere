@@ -618,8 +618,8 @@ async function persistAssuranceEuroRates(env: Env, rows: Record<string, string>[
       if (!match) continue;
       const rate = nullableNumber(raw);
       if (rate === null || rate <= -100 || rate >= 1000) continue;
-      const sql = "INSERT INTO assurance_euro_rates (contract_slug, fund_name, rate_year, rate_pct, source_url, source_checked_at, collected_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(contract_slug, rate_year, source_url) DO UPDATE SET fund_name=excluded.fund_name, rate_pct=excluded.rate_pct, source_checked_at=excluded.source_checked_at, collected_at=excluded.collected_at";
-      statements.push(env.HISTORY_DB.prepare(sql).bind(row.slug, row.fonds_euros || null, Number(match[1]), rate, row.url_source_principale || INSURANCE_EURO_SOURCE_URL, row.date_releve || null, collectedAt));
+      const sql = "INSERT INTO assurance_euro_rates (contract_slug, fund_name, rate_year, rate_pct, source_url, source_checked_at, collected_date, collected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(contract_slug, rate_year, source_url, collected_date) DO NOTHING";
+      statements.push(env.HISTORY_DB.prepare(sql).bind(row.slug, row.fonds_euros || null, Number(match[1]), rate, row.url_source_principale || INSURANCE_EURO_SOURCE_URL, row.date_releve || null, collectedAt.slice(0, 10), collectedAt));
     }
   }
   for (let offset = 0; offset < statements.length; offset += 80) await env.HISTORY_DB.batch(statements.slice(offset, offset + 80));
@@ -630,7 +630,7 @@ async function getAssuranceVieHistory(request: Request, env: Env): Promise<Respo
   const slug = (new URL(request.url).searchParams.get("slug") ?? "").trim();
   if (!slug || slug.length > 200) return json({ status: "invalid_request", message: "Fournir le slug du contrat." }, 400);
   try {
-    const result = await env.HISTORY_DB.prepare("SELECT contract_slug AS slug, fund_name AS fundName, rate_year AS year, rate_pct AS ratePct, source_url AS sourceUrl, source_checked_at AS sourceCheckedAt, collected_at AS collectedAt FROM assurance_euro_rates WHERE contract_slug = ? ORDER BY rate_year").bind(slug).all();
+    const result = await env.HISTORY_DB.prepare("SELECT contract_slug AS slug, fund_name AS fundName, rate_year AS year, rate_pct AS ratePct, source_url AS sourceUrl, source_checked_at AS sourceCheckedAt, collected_date AS collectedDate, collected_at AS collectedAt FROM assurance_euro_rates WHERE contract_slug = ? ORDER BY rate_year, collected_at").bind(slug).all();
     return json({ status: "ok", layer: "euro_fund", slug, count: result.results.length, observations: result.results, methodology: "Taux annuels publiés par année source. La date de collecte InvestPilot est distincte de l’année de rendement ; aucune observation quotidienne n’est créée." }, 200, { "Cache-Control": "public, max-age=300, s-maxage=600" });
   } catch (error) {
     return json({ status: "database_unavailable", message: error instanceof Error ? error.message : "Lecture D1 impossible." }, 503);
