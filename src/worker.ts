@@ -449,6 +449,23 @@ async function getAssuranceVieContracts(): Promise<Response> {
       euroResponse.text().then(parseCsvDocument)
     ]);
     const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
+    const availableRateYears = Array.from({ length: 16 }, (_, index) => 2015 + index)
+      .filter(year => euroRows.some(row => nullableNumber(row[`taux_${year}_pct`]) !== null));
+    const performanceEndYear = availableRateYears.length ? Math.max(...availableRateYears) : 2025;
+    const buildEuroPerformance = (euro: Record<string, string>, years: number) => {
+      const fromYear = performanceEndYear - years + 1;
+      const annualRates = Array.from({ length: years }, (_, index) => nullableNumber(euro[`taux_${fromYear + index}_pct`]));
+      const observations = annualRates.filter((rate): rate is number => rate !== null).length;
+      if (observations !== years || annualRates.some(rate => rate === null || rate <= -100)) {
+        return { annualizedPct: null, cumulativePct: null, years, fromYear, toYear: performanceEndYear, observations };
+      }
+      const growth = (annualRates as number[]).reduce((factor, rate) => factor * (1 + rate / 100), 1);
+      return {
+        annualizedPct: (Math.pow(growth, 1 / years) - 1) * 100,
+        cumulativePct: (growth - 1) * 100,
+        years, fromYear, toYear: performanceEndYear, observations
+      };
+    };
     const contracts = feeRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => {
       const euro = euroBySlug.get(row.slug) ?? {};
       return {
@@ -469,6 +486,12 @@ async function getAssuranceVieContracts(): Promise<Response> {
         euroRate2025Pct: nullableNumber(euro.taux_2025_pct),
         euroRate2024Pct: nullableNumber(euro.taux_2024_pct),
         euroRate2023Pct: nullableNumber(euro.taux_2023_pct),
+        euroPerformance: {
+          "1": buildEuroPerformance(euro, 1),
+          "3": buildEuroPerformance(euro, 3),
+          "5": buildEuroPerformance(euro, 5),
+          "8": buildEuroPerformance(euro, 8)
+        },
         feeCheckedAt: row.date_releve || null,
         rateCheckedAt: euro.date_releve || null,
         contractSourceUrl: row.url_source_principale || null,
@@ -486,7 +509,8 @@ async function getAssuranceVieContracts(): Promise<Response> {
         fees: "https://www.data.gouv.fr/datasets/frais-des-contrats-dassurance-vie-et-per-contrat-par-contrat",
         euroRates: "https://www.data.gouv.fr/datasets/taux-des-fonds-euros-des-contrats-dassurance-vie-et-per"
       },
-      methodology: "Comparaison descriptive, sans note ni classement. Frais et taux proviennent de deux fichiers distincts et sont rapprochés par slug. Les cases vides restent nulles et ne sont jamais transformées en zéro.",
+      methodology: "Tous les contrats identifiés comme assurance-vie dans le fichier des frais sont conservés, sans filtre sur le nombre d'ETF ni sur le nombre de supports. Le classement porte uniquement sur le fonds euros : rendement annualisé composé (CAGR) et rendement cumulé calculés à partir des taux annuels publiés. Une période n'est classable que si toutes ses années sont renseignées ; les données manquantes restent nulles. Les performances des unités de compte et des gestions pilotées ne sont pas assimilées à celles du contrat.",
+      performanceEndYear,
       rateDefinition: "Taux du fonds euros nets des frais de gestion du contrat et bruts des prélèvements sociaux ; bonus conditionnels non inclus.",
       contractCount: contracts.length,
       contracts
@@ -507,7 +531,7 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       if (request.method !== "GET") return json({ status: "method_not_allowed" }, 405, { Allow: "GET" });
       if (url.pathname === "/api/health") {
-        return json({ status: "ok", service: "investpilot-api", version: "0.5.1", timestamp: new Date().toISOString() });
+        return json({ status: "ok", service: "investpilot-api", version: "0.5.2", timestamp: new Date().toISOString() });
       }
       if (url.pathname === "/api/catalog/amundi") return getAmundiCatalog(request);
       if (url.pathname === "/api/market/fx") return getEcbFx();
