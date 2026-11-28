@@ -50,7 +50,7 @@ export function extractAmundiTotal(html: string): number | null {
     .replace(/\s+/g, " ")
     .trim();
   const matches = [...text.matchAll(/([\d\s]+)\s*produit\s*(?:\(s\)|s)?\s*trouv(?:é|e)\s*(?:\(s\)|s)?/gi)];
-  const totals = matches.map(match => Number(match[1].replace(/\s/g, ""))).filter(Number.isSafeInteger);
+  const totals = matches.map(match => Number(match[1].replace(/\s/g, ""))).filter(total => Number.isSafeInteger(total) && total > 0);
   return totals.length ? Math.max(...totals) : null;
 }
 export function discoverAmundiPaginationLinks(html: string, sourceUrl: string): string[] {
