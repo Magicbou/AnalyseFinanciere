@@ -385,109 +385,90 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
 }
 
 
-const EURONEXT_HISTORY_MARKETS = new Set(["XPAR", "XAMS", "XBRU", "XDUB", "XLIS", "XMIL", "XOSL"]);
 
-function decodeHtmlText(value: string): string {
-  return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
-    .replace(/\s+/g, " ").trim();
+const YAHOO_EXCHANGE_SUFFIXES: Record<string, string> = {
+  FP: ".PA", NA: ".AS", BB: ".BR", IM: ".MI", GY: ".DE",
+  LN: ".L", SW: ".SW", SM: ".MC", GR: ".F", SS: ".ST"
+};
+
+function yahooSymbolFromTicker(ticker: string): string | null {
+  const parts = ticker.trim().toUpperCase().split(/\s+/);
+  if (parts.length < 2) return null;
+  const suffix = parts[parts.length - 1];
+  const exchangeSuffix = YAHOO_EXCHANGE_SUFFIXES[suffix];
+  const base = parts.slice(0, -1).join(".");
+  if (!exchangeSuffix || !/^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(base)) return null;
+  return base + exchangeSuffix;
 }
 
-function parseMarketNumber(value: string): number | null {
-  let normalized = value.replace(/[\s\u00a0]/g, "").replace(/[^\d,.-]/g, "");
-  if (!normalized || normalized === "-" || normalized === "—") return null;
-  const comma = normalized.lastIndexOf(",");
-  const dot = normalized.lastIndexOf(".");
-  if (comma >= 0 && dot >= 0) {
-    normalized = comma > dot ? normalized.replace(/\./g, "").replace(",", ".") : normalized.replace(/,/g, "");
-  } else if (comma >= 0) {
-    normalized = /,\d{3}$/.test(normalized) ? normalized.replace(/,/g, "") : normalized.replace(",", ".");
-  }
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseEuronextHistoryHtml(html: string) {
-  const table = html.match(/<table\b[^>]*>([\s\S]*?)<\/table>/i)?.[1];
-  if (!table) return [];
-  const rows = [...table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(match =>
-    [...match[1].matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)].map(cell => decodeHtmlText(cell[1]))
-  ).filter(row => row.length > 1);
-  if (rows.length < 2) return [];
-  const headers = rows[0].map(value => value.toLocaleLowerCase("en").replace(/[^a-z]/g, ""));
-  const column = (...names: string[]) => headers.findIndex(header => names.includes(header));
-  const dateIndex = column("date");
-  const closeIndex = column("close", "last", "price");
-  const openIndex = column("open");
-  const highIndex = column("high");
-  const lowIndex = column("low");
-  const volumeIndex = column("numberofshares", "volume");
-  if (dateIndex < 0 || closeIndex < 0) return [];
-  return rows.slice(1).flatMap(row => {
-    const rawDate = row[dateIndex] ?? "";
-    const dateMatch = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    const date = dateMatch ? dateMatch[3] + "-" + dateMatch[2].padStart(2,"0") + "-" + dateMatch[1].padStart(2,"0") : rawDate;
-    const close = parseMarketNumber(row[closeIndex] ?? "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || close === null || close <= 0) return [];
-    return [{
-      date, close,
-      open: openIndex < 0 ? null : parseMarketNumber(row[openIndex] ?? ""),
-      high: highIndex < 0 ? null : parseMarketNumber(row[highIndex] ?? ""),
-      low: lowIndex < 0 ? null : parseMarketNumber(row[lowIndex] ?? ""),
-      volume: volumeIndex < 0 ? null : parseMarketNumber(row[volumeIndex] ?? "")
-    }];
-  }).sort((a,b) => a.date.localeCompare(b.date));
-}
-
-async function getEuronextHistory(request: Request): Promise<Response> {
+async function getEtfHistory(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const isin = (url.searchParams.get("isin") ?? "").trim().toUpperCase();
-  const market = (url.searchParams.get("market") ?? "").trim().toUpperCase();
-  if (!/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin) || !EURONEXT_HISTORY_MARKETS.has(market)) {
-    return json({ status: "invalid_request", message: "ISIN ou code de marché Euronext invalide." }, 400);
+  const ticker = (url.searchParams.get("ticker") ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin)) {
+    return json({ status: "invalid_request", message: "ISIN invalide." }, 400);
   }
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const to = url.searchParams.get("to") ?? yesterday.toISOString().slice(0,10);
-  const defaultFrom = new Date(today);
-  defaultFrom.setUTCFullYear(defaultFrom.getUTCFullYear() - 2);
-  const from = url.searchParams.get("from") ?? defaultFrom.toISOString().slice(0,10);
-  const fromTime = Date.parse(from + "T00:00:00Z");
-  const toTime = Date.parse(to + "T00:00:00Z");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)
-    || !Number.isFinite(fromTime) || !Number.isFinite(toTime) || fromTime > toTime
-    || toTime > Date.parse(yesterday.toISOString().slice(0,10) + "T00:00:00Z")
-    || fromTime < Date.parse(defaultFrom.toISOString().slice(0,10) + "T00:00:00Z")) {
-    return json({ status: "invalid_request", message: "InvestPilot limite cette première version aux deux dernières années." }, 400);
+  const symbol = yahooSymbolFromTicker(ticker);
+  if (!symbol) {
+    return json({ status: "unsupported_listing", message: "Ticker non reconnu par la correspondance des places de cotation Yahoo Finance. Aucun historique de remplacement n'est affiché." }, 200);
   }
-  const sourceUrl = "https://live.euronext.com/en/popout-page/getHistoricalPrice/" + isin + "-" + market;
-  const apiUrl = "https://live.euronext.com/en/ajax/getHistoricalPricePopup/" + isin + "-" + market;
+  const sourceUrl = "https://finance.yahoo.com/quote/" + encodeURIComponent(symbol) + "/history/";
+  const apiUrl = new URL("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(symbol));
+  apiUrl.searchParams.set("range", "10y");
+  apiUrl.searchParams.set("interval", "1d");
+  apiUrl.searchParams.set("events", "div,splits");
   const retrievedAt = new Date().toISOString();
   try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
+    const response = await fetch(apiUrl.toString(), {
       headers: {
-        Accept: "*/*",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-Requested-With": "XMLHttpRequest",
-        Referer: sourceUrl,
+        Accept: "application/json",
         "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.6)"
-      },
-      body: new URLSearchParams({ adjusted: "Y", startdate: from, enddate: to, nbSession: "10" })
+      }
     });
     if (!response.ok) return json({
-      status: "source_unavailable", source: sourceUrl, retrievedAt,
-      upstreamStatus: response.status, points: [],
-      message: "L'historique Euronext n'est pas accessible pour cette cotation. Aucun cours de remplacement n'est affiché."
+      status: "source_unavailable", source: sourceUrl, retrievedAt, points: [],
+      upstreamStatus: response.status,
+      message: "Yahoo Finance ne fournit pas l'historique de cette cotation pour le moment. Aucun cours n'est inventé."
     }, 502);
-    const html = await response.text();
-    const points = parseEuronextHistoryHtml(html);
+    const payload = await response.json() as {
+      chart?: {
+        error?: { code?: string; description?: string } | null;
+        result?: Array<{
+          meta?: { currency?: string; exchangeName?: string; symbol?: string };
+          timestamp?: number[];
+          indicators?: {
+            quote?: Array<{ open?: (number|null)[]; high?: (number|null)[]; low?: (number|null)[]; close?: (number|null)[]; volume?: (number|null)[] }>;
+            adjclose?: Array<{ adjclose?: (number|null)[] }>;
+          };
+        }> | null;
+      };
+    };
+    const result = payload.chart?.result?.[0];
+    const quote = result?.indicators?.quote?.[0];
+    const timestamps = result?.timestamp ?? [];
+    const adjustedValues = result?.indicators?.adjclose?.[0]?.adjclose;
+    const rawCloses = quote?.close ?? [];
+    const adjusted = Array.isArray(adjustedValues) && adjustedValues.some(value => typeof value === "number" && Number.isFinite(value));
+    const points = timestamps.flatMap((timestamp, index) => {
+      const rawClose = rawCloses[index];
+      const adjustedClose = adjustedValues?.[index];
+      const close = adjusted && typeof adjustedClose === "number" && Number.isFinite(adjustedClose)
+        ? adjustedClose
+        : rawClose;
+      if (typeof close !== "number" || !Number.isFinite(close) || close <= 0) return [];
+      return [{
+        date: new Date(timestamp * 1000).toISOString().slice(0,10),
+        close,
+        rawClose: typeof rawClose === "number" && Number.isFinite(rawClose) ? rawClose : null,
+        open: quote?.open?.[index] ?? null,
+        high: quote?.high?.[index] ?? null,
+        low: quote?.low?.[index] ?? null,
+        volume: quote?.volume?.[index] ?? null
+      }];
+    }).sort((a,b)=>a.date.localeCompare(b.date));
     if (!points.length) return json({
       status: "no_history", source: sourceUrl, retrievedAt, points: [],
-      upstreamDiagnostics: { contentType: response.headers.get("content-type"), bodyLength: html.length, tableCount: (html.match(/<table\\b/gi) ?? []).length, bodyStart: html.slice(0, 360) },
-      message: "Euronext n'a retourné aucun historique exploitable pour cet ISIN et cette place."
+      message: payload.chart?.error?.description || "Yahoo Finance n'a retourné aucun cours historique exploitable pour cette cotation."
     }, 200, { "Cache-Control": "public, max-age=3600, s-maxage=3600" });
     const yearEndByYear = new Map<number, (typeof points)[number]>();
     for (const point of points) yearEndByYear.set(Number(point.date.slice(0,4)), point);
@@ -495,18 +476,27 @@ async function getEuronextHistory(request: Request): Promise<Response> {
       const previousYearEnd = yearEndByYear.get(year - 1);
       const currentYearEnd = yearEndByYear.get(year);
       if (!previousYearEnd || !currentYearEnd) return [];
-      return [{ year, returnPct: (currentYearEnd.close / previousYearEnd.close - 1) * 100,
-        fromDate: previousYearEnd.date, toDate: currentYearEnd.date,
-        period: year === today.getUTCFullYear() ? "year_to_date" : "calendar_year" }];
+      return [{
+        year,
+        returnPct: (currentYearEnd.close / previousYearEnd.close - 1) * 100,
+        fromDate: previousYearEnd.date,
+        toDate: currentYearEnd.date,
+        period: year === new Date().getUTCFullYear() ? "year_to_date" : "calendar_year"
+      }];
     });
     return json({
-      status: "ok", source: sourceUrl, sourceName: "Euronext Live · cours historiques ajustés",
-      isin, market, from, to, retrievedAt, points, annualReturns,
-      methodology: "Série quotidienne ajustée retournée par Euronext. InvestPilot limite cette première version à deux ans. Les données historiques ne sont pas un flux temps réel."
+      status: "ok", source: sourceUrl, sourceName: "Yahoo Finance · historique quotidien",
+      isin, ticker, symbol, currency: result?.meta?.currency ?? null,
+      exchangeName: result?.meta?.exchangeName ?? null,
+      adjusted, from: points[0].date, to: points[points.length-1].date,
+      retrievedAt, points, annualReturns,
+      methodology: adjusted
+        ? "Cours de clôture ajustés retournés par Yahoo Finance, avec les événements de dividendes et de fractionnement demandés à la source. Historique disponible jusqu'à dix ans selon l'ancienneté de la cotation."
+        : "Cours de clôture non ajustés retournés par Yahoo Finance : la série n'intègre pas les distributions. Historique disponible jusqu'à dix ans selon l'ancienneté de la cotation."
     }, 200, { "Cache-Control": "public, max-age=21600, s-maxage=21600" });
   } catch (error) {
     return json({ status: "source_unavailable", source: sourceUrl, retrievedAt, points: [],
-      message: error instanceof Error ? error.message : "Erreur de lecture de l'historique Euronext." }, 502);
+      message: error instanceof Error ? error.message : "Erreur de lecture de l'historique Yahoo Finance." }, 502);
   }
 }
 
@@ -676,7 +666,7 @@ export default {
       if (url.pathname === "/api/market/fx") return getEcbFx();
       if (url.pathname === "/api/assurance-vie/contracts") return getAssuranceVieContracts();
       if (url.pathname === "/api/market/euronext") return getEuronextTrades(request);
-      if (url.pathname === "/api/market/history") return getEuronextHistory(request);
+      if (url.pathname === "/api/market/history") return getEtfHistory(request);
       return json({ status: "not_found", path: url.pathname }, 404);
     }
     return env.ASSETS.fetch(request);
