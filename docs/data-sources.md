@@ -58,7 +58,7 @@ Aucun fournisseur n'est retenu à ce stade. Le choix exige un test de couverture
 
 ## Historiques ETF et graphiques
 
-Pour les cotations rattachées aux marchés Euronext Paris, Amsterdam, Bruxelles et Milan, InvestPilot interroge le service public de cours historiques de Euronext Live par couple ISIN + MIC. Le graphique restitue les clôtures quotidiennes ajustées réellement retournées par la source. La fenêtre intégrée est limitée aux deux dernières années ; la série n'est pas assimilée à un flux temps réel et peut être indisponible pour une cotation ou une place non couverte.
+Pour les cotations rattachées aux marchés Euronext Paris, Amsterdam, Bruxelles et Milan, InvestPilot interroge le service public de cours historiques de Euronext Live par couple ISIN + MIC. Le graphique restitue les clôtures quotidiennes ajustées réellement retournées par la source. Dans cette première version, InvestPilot limite la fenêtre interrogée aux deux dernières années ; la série n'est pas assimilée à un flux temps réel et peut être indisponible pour une cotation ou une place non couverte.
 
 Source d'accès et exemple de formulaire historique :
 - https://live.euronext.com/fr/popout-page/getHistoricalPrice/LU1681043599-XPAR
