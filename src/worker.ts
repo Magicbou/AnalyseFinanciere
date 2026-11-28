@@ -402,7 +402,7 @@ function parseMarketNumber(value: string): number | null {
   if (comma >= 0 && dot >= 0) {
     normalized = comma > dot ? normalized.replace(/\./g, "").replace(",", ".") : normalized.replace(/,/g, "");
   } else if (comma >= 0) {
-    normalized = normalized.replace(",", ".");
+    normalized = /,\d{3}$/.test(normalized) ? normalized.replace(/,/g, "") : normalized.replace(",", ".");
   }
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
