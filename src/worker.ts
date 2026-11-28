@@ -2,7 +2,7 @@ interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
 }
 
-const AMUNDI_SOURCE = "https://www.amundietf.fr/fr/professionnels/produits-etf/recherche";
+const AMUNDI_SOURCE = "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche";
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...headers } });
 
@@ -175,7 +175,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     countryCode: "FRA",
     languageName: "French",
     languageCode: "fr",
-    userProfileName: "INSTIT",
+    userProfileName: "RETAIL",
     bcp47Code: "fr-FR"
   };
   const characteristics = [
@@ -357,17 +357,24 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       audit: {
         apiProductRecords: allProducts.length,
         activeProductRecords: activeProducts.length,
-        excludedByFranceInstitutionalVisibility: activeProducts.length - visibleProducts.length,
+        excludedByFranceRetailVisibility: activeProducts.length - visibleProducts.length,
         visibleProductRecords: visibleProducts.length,
         uniqueVisibleIsinCount: uniqueProducts.length,
         missingNavCount: uniqueProducts.filter(product => !product.nav).length,
         navWithoutPublicationDateCount: uniqueProducts.filter(product => Boolean(product.nav) && !product.navDate).length,
+        performanceCoverage: {
+          ytd: uniqueProducts.filter(product => product.performanceYtd !== null).length,
+          oneYear: uniqueProducts.filter(product => product.performance1y !== null).length,
+          threeYears: uniqueProducts.filter(product => product.performance3y !== null).length,
+          fiveYears: uniqueProducts.filter(product => product.performance5y !== null).length,
+          tenYears: uniqueProducts.filter(product => product.performance10y !== null).length
+        },
         missingIsinCount,
         duplicateIsinCount,
         country: context.countryName,
         countryCode: context.countryCode,
         profile: context.userProfileName,
-        completenessRule: "Catalogue complet si tous les produits actifs visibles pour le contexte France/INSTIT ont un ISIN valide et qu'aucun ISIN n'est dupliqué."
+        completenessRule: "Catalogue complet si tous les produits actifs visibles pour le contexte France/RETAIL ont un ISIN valide et qu'aucun ISIN n'est dupliqué."
       },
       notice: "Données issues de l'API officielle Amundi. Les valeurs liquidatives et performances sont celles publiées par l'émetteur, avec leur date propre ; elles ne constituent pas des cours de marché en temps réel.",
       products: filtered
