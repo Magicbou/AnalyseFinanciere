@@ -191,7 +191,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     "SHARE_CLASS_TYPE", "VISIBILITY_EXCEPTIONS"
   ];
   const metrics = ["ONE_YEAR", "THREE_YEARS", "FIVE_YEARS", "YEAR_TO_DATE", "TEN_YEARS"]
-    .map(period => ({ indicator: "PERFORMANCE", period }));
+    .map(period => ({ indicator: "shareCumulativePerformance", period }));
   const retrievedAt = new Date().toISOString();
   const sourceHeaders = {
     Accept: "application/json, text/plain, */*",
@@ -312,7 +312,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         };
         const acceptedPeriods = aliases[period] ?? [period];
         const metric = productMetrics.find(item =>
-          String(item.indicator ?? "").toUpperCase() === "PERFORMANCE"
+          ["SHARECUMULATIVEPERFORMANCE", "PERFORMANCE"].includes(String(item.indicator ?? "").toUpperCase())
           && acceptedPeriods.includes(String(item.period ?? "").toUpperCase())
         ) as Record<string, unknown> | undefined;
         const metricValue = metric?.value ?? metric?.values ?? metric?.performance ?? metric?.result;
@@ -369,17 +369,6 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       return !/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin);
     }).length;
     const duplicateIsinCount = mapped.length - uniqueProducts.length;
-    const performanceProbe = visibleProducts.find(product =>
-      asText(product.characteristics?.ISIN).toUpperCase() === "LU1135865084"
-    );
-    const performanceDiagnostics = performanceProbe ? {
-      productKeys: Object.keys(performanceProbe),
-      metrics: (performanceProbe as any).metrics ?? null,
-      performanceFields: Object.fromEntries(
-        Object.entries(performanceProbe.characteristics ?? {})
-          .filter(([key]) => /PERF|RETURN|PERFORMANCE/i.test(key))
-      )
-    } : null;
     const complete = uniqueProducts.length > 500
       && missingIsinCount === 0
       && duplicateIsinCount === 0
@@ -417,7 +406,6 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           fiveYears: uniqueProducts.filter(product => product.performance5y !== null).length,
           tenYears: uniqueProducts.filter(product => product.performance10y !== null).length
         },
-        performanceDiagnostics,
         missingIsinCount,
         duplicateIsinCount,
         country: context.countryName,
