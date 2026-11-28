@@ -26,7 +26,29 @@
 @media(max-width:1100px){.catalog-table-wrap{overflow-x:auto}.catalog-table-head,.product-parent,.listing-row{min-width:960px}}
 
 
-/* Comparateur assurance-vie : tableau dense, horizontalement défilant sur mobile. */
+/* Comparateur assurance-vie : classement multi-horizons et frais contractuels. */
+.insurance-performance-panel{margin:18px 0 24px;padding:20px;background:#fff;border:1px solid #e6ebe4;border-radius:12px}
+.insurance-performance-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:14px}
+.insurance-performance-heading h3{margin:5px 0;font:700 17px Manrope,sans-serif;color:#29392e}
+.insurance-performance-heading p{margin:0;color:#7a877d;font-size:11px;line-height:1.55}
+.insurance-period-switch{display:flex;gap:5px;flex-shrink:0;padding:4px;background:#f2f5ef;border-radius:9px}
+.insurance-period-switch button{border:0;border-radius:6px;padding:8px 11px;background:transparent;color:#647166;font-size:11px;font-weight:700}
+.insurance-period-switch button.active{background:#20372a;color:#eff6e8}
+.insurance-performance-note{margin:0 0 13px;padding:10px 12px;border-left:3px solid #c5dba5;background:#f7f9f4;color:#667468;font-size:10px;line-height:1.55}
+.insurance-performance-table{overflow-x:auto}
+.insurance-performance-head,.insurance-performance-row{display:grid;grid-template-columns:minmax(290px,2.2fr) repeat(4,minmax(112px,1fr));gap:12px;align-items:center;min-width:830px;padding:12px 14px}
+.insurance-performance-head{background:#f8faf7;border-bottom:1px solid #e8ede6;color:#849087;font-size:8px;font-weight:700;letter-spacing:.8px}
+.insurance-performance-row{border-bottom:1px solid #edf0eb;color:#4e5d52;font-size:10px;font-variant-numeric:tabular-nums}
+.insurance-performance-row:last-child{border-bottom:0}
+.insurance-performance-row>span:not(:first-child){display:grid;gap:4px;min-height:32px;align-content:center}
+.insurance-performance-row strong{font-size:11px;color:#304536;white-space:nowrap}
+.insurance-performance-row small{font-size:9px;color:#89958b;line-height:1.4}
+.insurance-performance-row .sorted-period,.insurance-performance-head .sorted-period{background:#f1f6e9;border-radius:6px;padding:9px}
+.insurance-contract-cell{display:grid;grid-template-columns:24px minmax(0,1fr);column-gap:8px;row-gap:4px;align-items:center}
+.insurance-contract-cell>b{grid-row:span 3;color:#81936f;font:700 12px Manrope,sans-serif;text-align:center}
+.insurance-contract-cell>strong,.insurance-contract-cell>small{grid-column:2}
+.insurance-contract-cell>strong{font-size:11px;color:#354438;line-height:1.4}
+.insurance-contract-cell>small{font-size:9px;color:#89958b;line-height:1.4}
 .insurance-table{overflow-x:auto}
 .insurance-table-head,.insurance-row{display:grid;grid-template-columns:2fr .8fr .8fr .8fr .8fr 1fr .8fr .8fr;gap:12px;align-items:center;min-width:1080px;padding:13px 15px}
 .insurance-table-head{background:#f8faf7;border-bottom:1px solid #e8ede6;color:#849087;font-size:8px;font-weight:700;letter-spacing:.7px}
@@ -51,5 +73,5 @@
 .manual-entry-error{margin:10px 0 0;color:#b42318;font-size:13px}
 .manual-source-tag{background:#fff4e5!important;color:#934f00!important;border:1px solid #f1d2a6}
 .remove-manual-button{border:0;background:transparent;color:#a33;font-size:11px;cursor:pointer}
-@media(max-width:760px){.manual-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.manual-entry-bar,.manual-entry-heading,.manual-entry-actions{align-items:flex-start;flex-direction:column}.manual-source-field{grid-column:span 2}}
+@media(max-width:760px){.insurance-performance-heading{align-items:flex-start;flex-direction:column}.insurance-period-switch{width:100%;justify-content:space-between}.insurance-period-switch button{flex:1}.manual-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.manual-entry-bar,.manual-entry-heading,.manual-entry-actions{align-items:flex-start;flex-direction:column}.manual-source-field{grid-column:span 2}}
 @media(max-width:460px){.manual-entry-grid{grid-template-columns:1fr}.manual-source-field{grid-column:span 1}}
