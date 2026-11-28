@@ -42,15 +42,15 @@ export function extractAmundiTotal(html: string): number | null {
   // Amundi may wrap the number and label in separate spans. Parse visible text,
   // not raw HTML tag boundaries.
   const text = html
-    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;|&#160;|&#xA0;/gi, " ")
     .replace(/&amp;/gi, "&")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
-  const match = text.match(/([\\d\\s]+)\\s*produit\\s*(?:\\(s\\)|s)?\\s*trouv(?:é|e)\\s*(?:\\(s\\)|s)?/i);
-  return match ? Number(match[1].replace(/\\s/g, "")) : null;
+  const match = text.match(/([\d\s]+)\s*produit\s*(?:\(s\)|s)?\s*trouv(?:é|e)\s*(?:\(s\)|s)?/i);
+  return match ? Number(match[1].replace(/\s/g, "")) : null;
 }
 export function discoverAmundiPaginationLinks(html: string, sourceUrl: string): string[] {
   const base = new URL(sourceUrl);
