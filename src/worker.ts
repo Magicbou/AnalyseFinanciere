@@ -250,10 +250,10 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       completeness: complete ? "complete" : "partial",
       audit: {
         sourceHtmlLength: firstPage.length,
-        sourceScriptUrls: [...firstPage.matchAll(/<script\\b[^>]*src=["']([^"']+)["']/gi)]
+        sourceScriptUrls: [...firstPage.matchAll(/<script\b[^>]*src=["']([^"']+)["']/gi)]
           .map(match => match[1]).slice(0, 30),
         sourceApiHints: [...firstPage.matchAll(/.{0,90}(?:api|ajax|json|graphql|pageSize|pageNum|finder|search).{0,90}/gi)]
-          .slice(0, 20).map(match => match[0].replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 220)),
+          .slice(0, 20).map(match => match[0].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220)),
         sourceMarkerFound: firstPage.includes("ETF_FINDER_SUMMARY"),
         sourceHtmlTableRows: (firstPage.match(/<tr\b/gi) ?? []).length,
         sourceProductMentions: [...firstPage.matchAll(/.{0,100}(?:produit|trouv).{0,100}/gi)].slice(0, 8)
