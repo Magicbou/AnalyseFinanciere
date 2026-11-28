@@ -72,6 +72,7 @@ jobs:
             completeness: d.completeness,
             performanceCoverage: d.audit?.performanceCoverage
           }));
+          console.log("Structure performances source Amundi:", JSON.stringify(d.audit?.performanceDiagnostics));
           if (d.status !== "ok" || d.productCount < 500 || d.completeness !== "complete") {
             console.error("Catalogue Amundi incomplet ou non vérifié.");
             process.exit(1);
