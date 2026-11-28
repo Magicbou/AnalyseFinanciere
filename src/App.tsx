@@ -26,15 +26,22 @@ function unique(values: (string | null | undefined)[]): string[] {
   return [...new Set(values.filter((v): v is string => Boolean(v && v.trim())))].sort((a,b)=>a.localeCompare(b,"fr"));
 }
 function CertificationLabel({ product }: { product: AmundiCatalogProduct }) {
-  // Statut volontairement conservateur : la provenance Amundi est identifiée,
-  // mais le rapprochement instrument/place et les contrôles exhaustifs ne sont pas encore réalisés.
-  const status = product.sourceType === "manual" ? "unverified" : "partial";
-  const label = status === "unverified" ? "Non vérifié" : "Partiellement vérifié";
-  const detail = status === "unverified"
-    ? "Ajout manuel : justificatifs et identité non contrôlés."
-    : "Source émetteur identifiée ; rapprochement indépendant de l'instrument et contrôles exhaustifs encore requis.";
-  return <span className={`certification-label certification-${status}`} title={detail} aria-label={`Statut de certification : ${label}. ${detail}`}>
-    <i aria-hidden="true"/>{label}
+  // Sans statut explicite issu des contrôles, rester conservateur.
+  const status = product.certificationStatus
+    ?? (product.sourceType === "manual" ? "unverified" : "partial");
+  const labels = {
+    certified: "Certifié",
+    partial: "Partiellement vérifié",
+    unverified: "Non vérifié"
+  } as const;
+  const detail = product.certificationReason
+    ?? (status === "certified"
+      ? "Les contrôles de certification associés à cette donnée ont été validés."
+      : status === "partial"
+        ? "Source émetteur identifiée ; rapprochement indépendant de l'instrument/place et contrôles exhaustifs encore requis."
+        : "Identité, provenance et justificatifs non suffisamment contrôlés.");
+  return <span className={`certification-label certification-${status}`} title={detail} aria-label={`Statut de certification : ${labels[status]}. ${detail}`}>
+    <i aria-hidden="true"/>{labels[status]}
   </span>;
 }
 
