@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./worker";
 
-const source = "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche";
+const source = "https://www.amundietf.fr/fr/professionnels/produits-etf/recherche";
 const total = 654;
 
 function productRow(index: number): string {
