@@ -394,40 +394,11 @@ async function getAssuranceVieContracts(): Promise<Response> {
 }
 
 
-async function inspectAmundiWidget(): Promise<Response> {
-  const page = await fetch(AMUNDI_SOURCE, { headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0" } });
-  const html = await page.text();
-  const scripts = [...html.matchAll(/<script\\b[^>]*src=["']([^"']+)["'][^>]*>/gi)]
-    .map(match => new URL(match[1], AMUNDI_SOURCE).toString())
-    .filter(url => /etf-finder/i.test(url));
-  const widgetIds = [...new Set([...html.matchAll(/wiid=["']([^"']+)["']/gi)].map(match => match[1]))];
-  const scriptResults = await Promise.all(scripts.map(async url => {
-    const response = await fetch(url);
-    const source = await response.text();
-    const terms = ["getProductsData", "getWidgetInstanceByID", "pageSize", "pageNum", "pagination", "ProductAPI"];
-    const snippets: Record<string, string[]> = {};
-    for (const term of terms) {
-      const positions = [...source.matchAll(new RegExp(term, "gi"))].slice(0, 5).map(match => match.index ?? 0);
-      snippets[term] = positions.map(position => source.slice(Math.max(0, position - 350), Math.min(source.length, position + 900)));
-    }
-    return { url, status: response.status, length: source.length, snippets };
-  }));
-  const widgetResults = await Promise.all(widgetIds.slice(0, 8).map(async widgetInstanceID => {
-    const url = new URL("/mapi/WidgetAPI/getWidgetInstanceByID", AMUNDI_SOURCE);
-    url.searchParams.set("widgetInstanceID", widgetInstanceID);
-    const response = await fetch(url, { headers: { Accept: "application/json", Referer: AMUNDI_SOURCE, "User-Agent": "Mozilla/5.0" } });
-    const body = await response.text();
-    return { widgetInstanceID, status: response.status, contentType: response.headers.get("content-type"), body: body.slice(0, 12000) };
-  }));
-  return json({ pageStatus: page.status, widgetIds, scripts: scriptResults, widgets: widgetResults });
-}
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
       if (request.method !== "GET") return json({ status: "method_not_allowed" }, 405, { Allow: "GET" });
-      if (url.pathname === "/api/_amundi-widget-inspect") return inspectAmundiWidget();
       if (url.pathname === "/api/health") {
         return json({ status: "ok", service: "investpilot-api", version: "0.5.0", timestamp: new Date().toISOString() });
       }
