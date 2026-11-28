@@ -4,7 +4,7 @@ interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
 }
 
-const AMUNDI_SOURCE = "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche";
+const AMUNDI_SOURCE = "https://www.amundietf.fr/fr/professionnels/produits-etf/recherche";
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...headers } });
 
