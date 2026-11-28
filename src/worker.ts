@@ -183,6 +183,56 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     }
 
     const firstPage = await firstResponse.text();
+    const apiUrl = new URL("/mapi/ProductAPI/getProductsData", AMUNDI_SOURCE).toString();
+    const apiCharacteristics = [
+      "ISIN", "TICKER", "TER", "IS_CLIMATE", "SHARE_MARKETING_NAME", "CURRENCY", "AUM", "WKN",
+      "MNEMO", "INDEX_TICKER", "EXCHANGE_PLACE", "INCEPTION_DATE", "AUM_IN_EURO", "FUND_AUM_IN_EURO",
+      "NAV", "NAV_DATE_DISPLAYED", "FUND_TYPE", "FUND_REPLICATION_METHODOLOGY", "FUND_SFDR_CLASSIFICATION",
+      "FUND_ISR_LABEL", "STRATEGY", "SUBASSET_CLASS", "ASSET_CLASS", "ESG_SCOPE", "ESG_SCOPES",
+      "INVESTMENT_ZONE", "IMPACT", "CATEGORY", "DISTRIBUTION_POLICY", "CURRENCY_HEDGE", "FUND_PEA",
+      "MAIN_LISTING", "CORE", "IS_ESG", "FUND_ISSUER", "IS_THEMATIC", "MAIN_LISTINGS", "ETF_CLASSIFICATION2",
+      "IS_CORE", "LEVERAGE", "OLD_ISINS", "OLD_WKNS", "OLD_SHARE_MARKETING_NAMES", "INSURANCE_CONTRACTS_COUNT",
+      "INSURANCE_PAGE_URL", "FUND_DOMICILIATION_COUNTRY", "SRRI", "LISTING_PLACES", "DESCRIPTIF",
+      "IS_BEING_ABSORBED", "IS_BEING_ABSORBED_BY", "MARKET", "SHARE_TYPE", "IS_ACTIVELY_MANAGED",
+      "SHARE_CLASS_TYPE", "VISIBILITY_EXCEPTIONS"
+    ];
+    const apiMetrics = ["ONE_YEAR", "THREE_YEARS", "FIVE_YEARS", "YEAR_TO_DATE", "TEN_YEARS"]
+      .map(period => ({ indicator: "PERFORMANCE", period }));
+    const apiProbes = await Promise.all(["INSTIT", "RETAIL"].map(async userProfileName => {
+      const context = {
+        countryName: "France", countryCode: "FRA", languageName: "French",
+        languageCode: "fr", userProfileName, bcp47Code: "fr-FR"
+      };
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            Accept: "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            Origin: new URL(AMUNDI_SOURCE).origin,
+            Referer: AMUNDI_SOURCE,
+            "User-Agent": headers["User-Agent"]
+          },
+          body: JSON.stringify({
+            sortCriterias: [], characteristics: apiCharacteristics, metrics: apiMetrics,
+            context, productType: "ALL", historics: [], url: true, filters: []
+          })
+        });
+        const raw = await response.text();
+        let data: any = null;
+        try { data = JSON.parse(raw); } catch { /* retain a short response sample */ }
+        return {
+          userProfileName, status: response.status, responseLength: raw.length,
+          responseKeys: data && typeof data === "object" ? Object.keys(data) : [],
+          productCount: Array.isArray(data?.products) ? data.products.length : null,
+          productKeys: data?.products?.[0] ? Object.keys(data.products[0]) : [],
+          characteristicKeys: data?.products?.[0]?.characteristics ? Object.keys(data.products[0].characteristics) : [],
+          sample: data ? null : raw.slice(0, 500)
+        };
+      } catch (error) {
+        return { userProfileName, error: error instanceof Error ? error.message : "API request failed" };
+      }
+    }));
     const widgetScriptMatch = firstPage.match(/<script\b[^>]*src=["']([^"']*\/etf-finder\/[^"']*\.js[^"']*)["']/i);
     const widgetScriptUrl = widgetScriptMatch?.[1] ? new URL(widgetScriptMatch[1], AMUNDI_SOURCE).toString() : null;
     let widgetScriptText = "";
@@ -285,6 +335,8 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       pageCount: htmlPages.length,
       completeness: complete ? "complete" : "partial",
       audit: {
+        apiUrl,
+        apiProbes,
         widgetScriptUrl,
         widgetScriptStatus,
         widgetScriptLength: widgetScriptText.length,
