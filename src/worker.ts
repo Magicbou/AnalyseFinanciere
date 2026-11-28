@@ -486,9 +486,19 @@ async function getEuronextHistory(request: Request): Promise<Response> {
       status: "no_history", source: sourceUrl, retrievedAt, points: [],
       message: "Euronext n'a retourné aucun historique exploitable pour cet ISIN et cette place."
     }, 200, { "Cache-Control": "public, max-age=3600, s-maxage=3600" });
+    const yearEndByYear = new Map<number, (typeof points)[number]>();
+    for (const point of points) yearEndByYear.set(Number(point.date.slice(0,4)), point);
+    const annualReturns = [...yearEndByYear.keys()].sort((a,b)=>a-b).flatMap(year => {
+      const previousYearEnd = yearEndByYear.get(year - 1);
+      const currentYearEnd = yearEndByYear.get(year);
+      if (!previousYearEnd || !currentYearEnd) return [];
+      return [{ year, returnPct: (currentYearEnd.close / previousYearEnd.close - 1) * 100,
+        fromDate: previousYearEnd.date, toDate: currentYearEnd.date,
+        period: year === today.getUTCFullYear() ? "year_to_date" : "calendar_year" }];
+    });
     return json({
       status: "ok", source: sourceUrl, sourceName: "Euronext Live · cours historiques ajustés",
-      isin, market, from, to, retrievedAt, points,
+      isin, market, from, to, retrievedAt, points, annualReturns,
       methodology: "Série quotidienne ajustée retournée par Euronext. Fenêtre maximale de deux ans sur ce service public. Les données de marché historiques ne sont pas un flux temps réel."
     }, 200, { "Cache-Control": "public, max-age=21600, s-maxage=21600" });
   } catch (error) {
