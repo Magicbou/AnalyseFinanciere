@@ -3,6 +3,8 @@ export type AmundiCatalogProduct = {
   ongoingCharges: string | null; assetsUnderManagement: string | null; sfdr: string | null;
   exposure: string | null; nav: string | null; navDate: string | null;
   performanceYtd: string | null; performance1y: string | null; sourceUrl: string;
+  performance3y?: string | null; performance5y?: string | null; performance10y?: string | null;
+  srri?: string | null;
   sourceType?: "amundi" | "manual";
   manualSource?: string | null;
   manualAddedAt?: string | null;

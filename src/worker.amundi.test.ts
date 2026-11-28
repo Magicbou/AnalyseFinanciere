@@ -18,6 +18,7 @@ function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
       FUND_AUM_IN_EURO: 125000000,
       FUND_SFDR_CLASSIFICATION: "Article 8",
       ETF_CLASSIFICATION2: "MSCI World",
+      SRRI: "4",
       NAV: 123.45,
       NAV_DATE_DISPLAYED: 1795651200000,
       VISIBILITY_EXCEPTIONS: [],
@@ -25,7 +26,10 @@ function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
     },
     metrics: [
       { indicator: "PERFORMANCE", period: "YEAR_TO_DATE", value: 7.5 },
-      { indicator: "PERFORMANCE", period: "ONE_YEAR", value: 12.3 }
+      { indicator: "PERFORMANCE", period: "ONE_YEAR", value: 12.3 },
+      { indicator: "PERFORMANCE", period: "THREE_YEARS", value: 8.4 },
+      { indicator: "PERFORMANCE", period: "FIVE_YEARS", value: 6.7 },
+      { indicator: "PERFORMANCE", period: "TEN_YEARS", value: 9.1 }
     ],
     currencies: { CURRENCY: "EUR" }
   };
@@ -63,7 +67,7 @@ describe("Amundi catalogue Worker integration", () => {
     );
     const body = await response.json() as {
       status: string; completeness: string; sourceTotal: number; productCount: number;
-      pageCount: number; products: Array<{ isin: string; ticker: string; name: string; nav: string | null }>;
+      pageCount: number; products: Array<{ isin: string; ticker: string; name: string; nav: string | null; performance1y: string | null; performance3y: string | null; performance5y: string | null; performance10y: string | null; srri: string | null }>;
       audit: { apiProductRecords: number; activeProductRecords: number; excludedByFranceInstitutionalVisibility: number };
     };
 
@@ -82,7 +86,8 @@ describe("Amundi catalogue Worker integration", () => {
     expect(body.products[0]).toMatchObject({
       isin: "LU0000000001", ticker: "ETF1 FP", name: "Amundi Test ETF 1",
       currency: "EUR", ongoingCharges: "0.18 %", sfdr: "Article 8",
-      exposure: "MSCI World", nav: "123.45", performanceYtd: "7.5", performance1y: "12.3"
+      exposure: "MSCI World", nav: "123.45", performanceYtd: "7.5", performance1y: "12.3",
+      performance3y: "8.4", performance5y: "6.7", performance10y: "9.1", srri: "4"
     });
     expect(body.products.some(product => product.isin === "LU0000000655")).toBe(false);
     expect(postedBody).toMatchObject({
@@ -95,7 +100,11 @@ describe("Amundi catalogue Worker integration", () => {
     });
     expect(postedBody.characteristics).toContain("ISIN");
     expect(postedBody.characteristics).toContain("MAIN_LISTINGS");
+    expect(postedBody.characteristics).toContain("SRRI");
     expect(postedBody.metrics).toContainEqual({ indicator: "PERFORMANCE", period: "YEAR_TO_DATE" });
+    for (const period of ["ONE_YEAR", "THREE_YEARS", "FIVE_YEARS", "TEN_YEARS"]) {
+      expect(postedBody.metrics).toContainEqual({ indicator: "PERFORMANCE", period });
+    }
   });
 
   it("supports server-side search by name, ISIN, ticker, WKN and exposure", async () => {

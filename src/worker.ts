@@ -314,6 +314,12 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         navDate: formatDate(data.NAV_DATE_DISPLAYED),
         performanceYtd: performance("YEAR_TO_DATE"),
         performance1y: performance("ONE_YEAR"),
+        performance3y: performance("THREE_YEARS"),
+        performance5y: performance("FIVE_YEARS"),
+        performance10y: performance("TEN_YEARS"),
+        // Amundi publishes the SRRI on the product characteristics. Keep only
+        // the official 1–7 scale; missing or malformed values remain unavailable.
+        srri: /^[1-7]$/.test(asText(data.SRRI)) ? asText(data.SRRI) : null,
         sourceUrl: AMUNDI_SOURCE,
         sourceType: "amundi" as const
       }];
@@ -534,7 +540,7 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       if (request.method !== "GET") return json({ status: "method_not_allowed" }, 405, { Allow: "GET" });
       if (url.pathname === "/api/health") {
-        return json({ status: "ok", service: "investpilot-api", version: "0.5.2", timestamp: new Date().toISOString() });
+        return json({ status: "ok", service: "investpilot-api", version: "0.5.3", timestamp: new Date().toISOString() });
       }
       if (url.pathname === "/api/catalog/amundi") return getAmundiCatalog(request);
       if (url.pathname === "/api/market/fx") return getEcbFx();

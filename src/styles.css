@@ -75,3 +75,16 @@
 .remove-manual-button{border:0;background:transparent;color:#a33;font-size:11px;cursor:pointer}
 @media(max-width:760px){.insurance-performance-heading{align-items:flex-start;flex-direction:column}.insurance-period-switch{width:100%;justify-content:space-between}.insurance-period-switch button{flex:1}.manual-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.manual-entry-bar,.manual-entry-heading,.manual-entry-actions{align-items:flex-start;flex-direction:column}.manual-source-field{grid-column:span 2}}
 @media(max-width:460px){.manual-entry-grid{grid-template-columns:1fr}.manual-source-field{grid-column:span 1}}
+
+
+/* Données ETF complémentaires : performances historiques Amundi et SRRI. */
+.catalog-table-head,.product-parent,.listing-row{grid-template-columns:1.55fr 1.05fr .45fr .58fr .72fr .68fr .88fr 1.38fr .55fr .72fr}
+.performance-value{display:grid;grid-template-columns:repeat(2,minmax(42px,1fr));gap:4px 8px;color:#778579;font-size:9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.performance-value>span{display:flex;justify-content:space-between;gap:3px}
+.performance-value strong{font-size:9px;color:#405b43}
+.risk-value{display:grid;gap:3px;font-size:10px;color:#8a958b}
+.risk-value strong{font:700 13px Manrope;color:#526b48}
+.risk-value small{font-size:9px;color:#89958b}
+.market-value{color:#267348}
+@media(max-width:1100px){.catalog-table-head,.product-parent,.listing-row{min-width:1180px;grid-template-columns:1.55fr 1.05fr .45fr .58fr .72fr .68fr .88fr 1.38fr .55fr .72fr}}
+@media(max-width:760px){.catalog-table-head,.product-parent,.listing-row{min-width:1180px}}
