@@ -183,7 +183,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
     }
 
     const firstPage = await firstResponse.text();
-    const widgetScriptMatch = firstPage.match(/<script\\b[^>]*src=["']([^"']*\\/etf-finder\\/[^"']*\\.js[^"']*)["']/i);
+    const widgetScriptMatch = firstPage.match(/<script\b[^>]*src=["']([^"']*\/etf-finder\/[^"']*\.js[^"']*)["']/i);
     const widgetScriptUrl = widgetScriptMatch?.[1] ? new URL(widgetScriptMatch[1], AMUNDI_SOURCE).toString() : null;
     let widgetScriptText = "";
     let widgetScriptStatus: number | null = null;
@@ -194,10 +194,10 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         if (widgetResponse.ok) widgetScriptText = await widgetResponse.text();
       } catch { /* diagnostic only; the catalogue remains source-controlled */ }
     }
-    const widgetApiStrings = [...new Set(widgetScriptText.match(/["'`](?:https?:\\/\\/|\\/)[^"'`]{3,180}["'`]/g) ?? [])]
+    const widgetApiStrings = [...new Set(widgetScriptText.match(/["'`](?:https?:\/\/|\/)[^"'`]{3,180}["'`]/g) ?? [])]
       .filter(value => /api|search|product|finder|etf|data/i.test(value)).slice(0, 40);
-    const widgetFunctionHints = [...widgetScriptText.matchAll(/.{0,100}(?:fetch\\(|XMLHttpRequest|axios|apiUrl|baseUrl|pageSize|pageNum|totalItems|searchEndpoint).{0,100}/gi)]
-      .slice(0, 30).map(match => match[0].replace(/\\s+/g, " ").trim().slice(0, 220));
+    const widgetFunctionHints = [...widgetScriptText.matchAll(/.{0,100}(?:fetch\(|XMLHttpRequest|axios|apiUrl|baseUrl|pageSize|pageNum|totalItems|searchEndpoint).{0,100}/gi)]
+      .slice(0, 30).map(match => match[0].replace(/\s+/g, " ").trim().slice(0, 220));
     const sourceTotal = extractAmundiTotal(firstPage);
     // Amundi renders 50 products on the initial page; its pager is JavaScript,
     // so the remaining numbered pages must also be requested explicitly.
