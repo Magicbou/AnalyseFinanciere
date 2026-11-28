@@ -450,7 +450,7 @@ async function getAssuranceVieContracts(): Promise<Response> {
     ]);
     const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
     const availableRateYears = Array.from({ length: 16 }, (_, index) => 2015 + index)
-      .filter(year => euroRows.some(row => nullableNumber(row[`taux_${year}_pct`]) !== null));
+      .filter(year => year <= new Date().getUTCFullYear() - 1 && euroRows.some(row => nullableNumber(row[`taux_${year}_pct`]) !== null));
     const performanceEndYear = availableRateYears.length ? Math.max(...availableRateYears) : 2025;
     const buildEuroPerformance = (euro: Record<string, string>, years: number) => {
       const fromYear = performanceEndYear - years + 1;
