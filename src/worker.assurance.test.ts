@@ -49,6 +49,9 @@ describe("Assurance-vie performance rankings", () => {
     expect(withEtf.euroPerformance["3"].cumulativePct).toBeCloseTo((1.02 * 1.025 * 1.03 - 1) * 100, 8);
     expect(withEtf.euroPerformance["5"].annualizedPct).not.toBeNull();
     expect(withEtf.euroPerformance["8"].annualizedPct).not.toBeNull();
+    expect(withEtf.annualRates).toHaveLength(11);
+    expect(withEtf.annualRates.find((item: any) => item.year === 2015).ratePct).toBeNull();
+    expect(withEtf.annualRates.find((item: any) => item.year === 2025).ratePct).toBe(3);
     expect(withoutEtf.etfCount).toBe(0);
     expect(withoutEtf.euroPerformance["1"].annualizedPct).toBeNull();
     expect(withoutEtf.euroPerformance["8"].annualizedPct).toBeNull();

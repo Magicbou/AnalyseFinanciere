@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Globe2, Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, BookOpen, ChartNoAxesCombined, ChevronDown, ChevronRight, CircleAlert, Database, FileSpreadsheet, FilterX, Layers3, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Wallet } from "lucide-react";
 import { matchesAmundiFilters, matchesAmundiSearch, type AmundiCatalogProduct, type AmundiCatalogResponse } from "./lib/catalog";
 
@@ -8,7 +8,10 @@ type EuronextTrade = { isin:string; status:string; price:string|null; currency?:
 type EuronextResponse = { status:string; source?:string; sourceName?:string; retrievedAt?:string; delayPolicy?:string; results?:EuronextTrade[]; message?:string };
 type AssuranceSortPeriod = "1" | "3" | "5" | "8";
 type AssurancePerformance = { annualizedPct:number|null; cumulativePct:number|null; years:number; fromYear:number; toYear:number; observations:number };
-type AssuranceContract = { slug:string; name:string; insurer:string|null; distributor:string|null; management:string|null; entryFeePct:number|null; ucManagementFeePct:number|null; euroManagementFeePct:number|null; arbitrationFeePct:number|null; supportCount:number|null; etfCount:number|null; scpiCount:number|null; minimumInitialEur:number|null; euroFund:string|null; euroRate2025Pct:number|null; euroRate2024Pct:number|null; euroRate2023Pct:number|null; euroPerformance:Record<AssuranceSortPeriod,AssurancePerformance>; feeCheckedAt:string|null; rateCheckedAt:string|null; contractSourceUrl:string|null; rateSourceUrl:string|null; detailUrl:string|null };
+type AnnualRate = { year:number; ratePct:number|null };
+type EuronextHistoryPoint = { date:string; close:number; open:number|null; high:number|null; low:number|null; volume:number|null };
+type EuronextHistory = { status:string; source?:string; sourceName?:string; retrievedAt?:string; from?:string; to?:string; points?:EuronextHistoryPoint[]; annualReturns?:{year:number;returnPct:number;fromDate:string;toDate:string;period:string}[]; methodology?:string; message?:string };
+type AssuranceContract = { slug:string; name:string; insurer:string|null; distributor:string|null; management:string|null; entryFeePct:number|null; ucManagementFeePct:number|null; euroManagementFeePct:number|null; arbitrationFeePct:number|null; supportCount:number|null; etfCount:number|null; scpiCount:number|null; minimumInitialEur:number|null; euroFund:string|null; euroRate2025Pct:number|null; euroRate2024Pct:number|null; euroRate2023Pct:number|null; annualRates?:AnnualRate[]; euroPerformance:Record<AssuranceSortPeriod,AssurancePerformance>; feeCheckedAt:string|null; rateCheckedAt:string|null; contractSourceUrl:string|null; rateSourceUrl:string|null; detailUrl:string|null };
 type AssuranceResponse = { status:string; sourceName?:string; retrievedAt?:string; sourceLicense?:string; sourceUrls?:{fees:string;euroRates:string}; methodology?:string; rateDefinition?:string; performanceEndYear?:number; contractCount?:number; contracts?:AssuranceContract[]; message?:string };
 const emptyFilters: Filters = { currency: "Toutes", venue: "Toutes", sfdr: "Toutes", exposure: "Toutes" };
 
@@ -25,6 +28,70 @@ function groupProducts(products: AmundiCatalogProduct[]) {
   for (const product of products) map.set(product.isin, [...(map.get(product.isin) ?? []), product]);
   return [...map.entries()].map(([isin, listings]) => ({ isin, product: listings[0], listings }));
 }
+
+function marketCodeFromTicker(ticker: string): string | null {
+  const suffix = ticker.trim().split(/\s+/).pop()?.toUpperCase();
+  const map: Record<string,string> = { FP:"XPAR", NA:"XAMS", BB:"XBRU", IM:"XMIL" };
+  return suffix ? map[suffix] ?? null : null;
+}
+
+function MarketHistoryChart({ title, history }: { title:string; history:EuronextHistory }) {
+  const points = history.points ?? [];
+  if (!points.length) return <div className="history-empty">{history.message ?? "Aucun historique exploitable pour cette cotation."}</div>;
+  const values = points.map(point=>point.close);
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max-min || Math.max(Math.abs(max)*0.01,0.01);
+  const coordinates = points.map((point,index)=>({
+    x: 34 + (points.length===1 ? 460 : index/(points.length-1)*920),
+    y: 198 - ((point.close-min)/range)*156
+  }));
+  const path = coordinates.map((point,index)=>(index===0?"M":"L")+point.x.toFixed(1)+" "+point.y.toFixed(1)).join(" ");
+  const first = points[0], last = points[points.length-1];
+  const change = first.close ? (last.close/first.close-1)*100 : null;
+  return <section className="history-chart-panel">
+    <div className="history-chart-heading"><div><strong>{title}</strong><small>Historique quotidien ajusté · {points.length} observations</small></div><div className="history-chart-current"><strong>{last.close.toLocaleString("fr-FR",{maximumFractionDigits:4})}</strong><small>{change===null?"":(change>=0?"+":"")+change.toLocaleString("fr-FR",{maximumFractionDigits:2})+" % sur la période"}</small></div></div>
+    <svg className="history-line-chart" viewBox="0 0 980 240" role="img" aria-label={"Historique de cours de "+title}>
+      <line x1="34" y1="42" x2="954" y2="42" />
+      <line x1="34" y1="120" x2="954" y2="120" />
+      <line x1="34" y1="198" x2="954" y2="198" />
+      <path d={path} />
+      <circle cx={coordinates[coordinates.length-1].x} cy={coordinates[coordinates.length-1].y} r="4" />
+      <text x="34" y="225">{first.date}</text><text x="954" y="225" textAnchor="end">{last.date}</text>
+      <text x="34" y="28">{max.toLocaleString("fr-FR",{maximumFractionDigits:3})}</text><text x="34" y="214">{min.toLocaleString("fr-FR",{maximumFractionDigits:3})}</text>
+    </svg>
+    {history.annualReturns?.length?<div className="history-annual-performance"><strong>Performance par année, calculée sur les clôtures ajustées</strong><div>{history.annualReturns.map(item=><span key={item.year}><b>{item.period==="year_to_date"?item.year+" à date":item.year}</b><strong>{(item.returnPct>=0?"+":"")+item.returnPct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} %</strong><small>{item.fromDate} → {item.toDate}</small></span>)}</div></div>:null}
+    <div className="history-chart-foot"><span>Source : <a href={history.source} target="_blank" rel="noreferrer">Euronext Live</a></span><span>Collecte : {history.retrievedAt?new Date(history.retrievedAt).toLocaleString("fr-FR"):"n.c."}</span></div>
+    <p>{history.methodology ?? "Historique publié par Euronext. Cours ajustés ; la série n'est pas un flux temps réel."}</p>
+  </section>;
+}
+
+function AnnualRateChart({ title, rates, sourceUrl, checkedAt }: { title:string; rates:AnnualRate[]; sourceUrl:string|null; checkedAt:string|null }) {
+  const available = rates.filter(item=>item.ratePct!==null);
+  if (!available.length) return <div className="history-empty">Aucun taux annuel publié pour ce fonds euros dans la source.</div>;
+  const values = available.map(item=>item.ratePct as number);
+  const min = Math.min(0,...values), max = Math.max(0,...values);
+  const range = max-min || 1;
+  const baseline = 22 + (max/range)*112;
+  const slot = 900/Math.max(rates.length,1);
+  return <section className="history-chart-panel annual-history-panel">
+    <div className="history-chart-heading"><div><strong>{title}</strong><small>Rendements annuels publiés du fonds euros · valeurs non interpolées</small></div><div className="history-chart-current"><strong>{available.length} années</strong><small>{available[0].year}–{available[available.length-1].year}</small></div></div>
+    <svg className="annual-bar-chart" viewBox="0 0 980 190" role="img" aria-label={"Rendements annuels du fonds euros "+title}>
+      <line x1="34" y1={baseline} x2="954" y2={baseline}/>
+      {rates.map((item,index)=>{
+        const x=38+index*slot+slot*.15;
+        const width=Math.max(8,slot*.68);
+        if(item.ratePct===null) return <g key={item.year}><text x={x+width/2} y={baseline-7} textAnchor="middle">n.c.</text><text x={x+width/2} y="184" textAnchor="middle">{item.year}</text></g>;
+        const value=item.ratePct;
+        const height=Math.abs(value)/range*112;
+        const y=value>=0?baseline-height:baseline;
+        return <g key={item.year}><rect x={x} y={y} width={width} height={Math.max(1,height)} rx="3"/><text x={x+width/2} y={value>=0?Math.max(12,y-5):Math.min(174,y+height+14)} textAnchor="middle">{value.toLocaleString("fr-FR",{maximumFractionDigits:2})} %</text><text x={x+width/2} y="184" textAnchor="middle">{item.year}</text></g>;
+      })}
+    </svg>
+    <div className="history-chart-foot"><span>Source : {sourceUrl?<a href={sourceUrl} target="_blank" rel="noreferrer">jeu de données public</a>:"non renseignée"}</span><span>Relevé source : {checkedAt??"n.c."}</span></div>
+    <p>Taux annuels nets des frais de gestion du contrat et bruts des prélèvements sociaux, selon la définition du jeu de données. Le graphique concerne le fonds euros, pas les unités de compte.</p>
+  </section>;
+}
+
 function App() {
   const [page, setPage] = useState<Page>(() => { const candidate = window.location.hash.slice(1) as Page; return ["overview","etfs","assurance","portfolio","sources"].includes(candidate) ? candidate : "overview"; });
   const [search, setSearch] = useState("");
@@ -56,6 +123,10 @@ function App() {
   const [assuranceError, setAssuranceError] = useState<string|null>(null);
   const [assuranceSearch, setAssuranceSearch] = useState("");
   const [assuranceSortPeriod, setAssuranceSortPeriod] = useState<AssuranceSortPeriod>("5");
+  const [historyByIsin, setHistoryByIsin] = useState<Record<string,EuronextHistory>>({});
+  const [historyLoadingIsin, setHistoryLoadingIsin] = useState<string|null>(null);
+  const [historyOpenIsin, setHistoryOpenIsin] = useState<string|null>(null);
+  const [assuranceHistorySlug, setAssuranceHistorySlug] = useState<string|null>(null);
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void refreshAll(); }, []);
   useEffect(() => { localStorage.setItem("investpilot.manualEtfs", JSON.stringify(manualProducts)); }, [manualProducts]);
@@ -77,6 +148,28 @@ function App() {
     } finally { setEuronextLoading(false); }
   };
 
+  const loadEuronextHistory = async (product: AmundiCatalogProduct) => {
+    const market = marketCodeFromTicker(product.ticker);
+    if (!market) {
+      setHistoryByIsin(current=>({...current,[product.isin]:{status:"no_history",message:"Historique intégré indisponible pour cette place. Le service historique public Euronext ne couvre pas ce ticker."}}));
+      return;
+    }
+    setHistoryLoadingIsin(product.isin);
+    try {
+      const params = new URLSearchParams({ isin:product.isin, market });
+      const response = await fetch("/api/market/history?"+params.toString(),{headers:{Accept:"application/json"}});
+      const data = await response.json() as EuronextHistory;
+      if (!response.ok && data.status!=="no_history") throw new Error(data.message||"Historique indisponible.");
+      setHistoryByIsin(current=>({...current,[product.isin]:data}));
+    } catch(error) {
+      setHistoryByIsin(current=>({...current,[product.isin]:{status:"source_unavailable",message:error instanceof Error?error.message:"Erreur de lecture de l'historique."}}));
+    } finally { setHistoryLoadingIsin(null); }
+  };
+  const toggleEuronextHistory = (product: AmundiCatalogProduct) => {
+    if (historyOpenIsin===product.isin) { setHistoryOpenIsin(null); return; }
+    setHistoryOpenIsin(product.isin);
+    if (!historyByIsin[product.isin]) void loadEuronextHistory(product);
+  };
   const loadCatalog = async () => {
     setLoading(true); setCatalogError(null);
     try {
@@ -195,14 +288,14 @@ function App() {
   ];
 
   const todayLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
-  const appVersion = "0.5.3";
+  const appVersion = "0.6.0";
 
   return <main className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#" onClick={e=>{e.preventDefault();window.location.hash="overview";setPage("overview");}}><span className="brand-mark">I</span><span>invest<span className="brand-light">pilot</span></span></a>
       <div className="workspace-label">ESPACE PERSONNEL</div>
       <nav>{nav.map(({id,label,icon:Icon})=><button key={id} className={`nav-item ${page===id?"active":""}`} onClick={()=>{window.location.hash=id;setPage(id);}}><Icon size={18}/>{label}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.5.3</span></div>
+      <div className="sidebar-bottom"><div className="integrity"><ShieldCheck size={17}/><span>Mode factuel activé</span></div><p>Les données non vérifiées ne sont jamais présentées comme des faits.</p><span className="version">VERSION 0.6.0</span></div>
     </aside>
     <section className="main-content">
       <header className="topbar"><div><span className="eyebrow">{page==="etfs"?"UNIVERS D'INVESTISSEMENT":page==="assurance"?"COMPARATEUR DE CONTRATS":page==="portfolio"?"SUIVI PERSONNEL":page==="sources"?"TRAÇABILITÉ":"TABLEAU DE BORD"}</span><h1>{page==="etfs"?"Catalogue des ETF Amundi":page==="assurance"?"Comparer les assurances-vie":page==="portfolio"?"Votre portefeuille":page==="sources"?"Sources & qualité des données":"Décider sur des faits."}</h1><div className="page-meta"><span>{todayLabel}</span><span className="meta-separator">·</span><span>InvestPilot v{appVersion}</span></div></div><div className="topbar-right"><button className="secondary-button" onClick={()=>void refreshAll()} disabled={refreshing} title="Actualiser toutes les sources disponibles"><RefreshCw size={15} className={refreshing?"spin":""}/>{refreshing?"Actualisation…":"Actualiser les données"}</button><span className="status-dot"/>{refreshing?"Synchronisation en cours":lastRefreshAt?`Actualisé à ${new Date(lastRefreshAt).toLocaleTimeString("fr-FR")}`:catalog?"Catalogue source accessible":"Sources en attente"}<span className="avatar">P</span></div></header>
@@ -262,9 +355,11 @@ function App() {
           <div className="catalog-table-head"><span>PRODUIT / COTATION</span><span>ISIN</span><span>DEVISE</span><span>FRAIS</span><span>VL AMUNDI / PART</span><span>DATE DE PUBLICATION</span><span>DERNIER COURS · EURONEXT PARIS</span><span>PERFORMANCES AMUNDI</span><span>RISQUE SRRI</span><span>ÉTAT</span></div>
           {grouped?groups.map(group=><div className="product-group" key={group.isin}>
             <button className="product-parent" onClick={()=>setExpanded(old=>{const next=new Set(old);next.has(group.isin)?next.delete(group.isin):next.add(group.isin);return next;})}><span className="product-name"><span className="expand-icon">{expanded.has(group.isin)?<ChevronDown size={16}/>:<ChevronRight size={16}/>}</span><span><strong>{group.product.name||"Produit sans nom"}</strong><small>{group.listings.length} cotation(s) référencée(s) · {group.product.exposure||"Exposition non renseignée"}</small></span></span><span className="mono">{group.isin}</span><span>{group.product.currency||"—"}</span><span>{group.product.ongoingCharges||"—"}</span><span className="nav-value">{group.product.nav ? `${group.product.nav} ${group.product.currency}` : "Indisponible"}</span><span className="nav-date">{group.product.navDate ? `VL du ${group.product.navDate}` : "Date non publiée"}</span><span className={`market-value ${euronextTrades[group.isin]?.status==="trade_found"?"market-value-current":""}`}>{euronextTrades[group.isin]?.status==="trade_found" ? `${euronextTrades[group.isin].price} ${euronextTrades[group.isin].currency||group.product.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[group.isin]?.tradeTime?new Date(euronextTrades[group.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="performance-value">{[["1 an",group.product.performance1y],["3 ans",group.product.performance3y],["5 ans",group.product.performance5y],["10 ans",group.product.performance10y]].map(([label,value])=><span key={label}>{label} <strong>{value!==null&&value!==undefined?Number(value).toLocaleString("fr-FR",{maximumFractionDigits:2})+" %":"—"}</strong></span>)}</span><span className="risk-value">{group.product.srri&&/^[1-7]$/.test(group.product.srri)?<><strong>{group.product.srri} / 7</strong><small>SRRI Amundi</small></>:"Indisponible"}</span><span className={`source-tag ${group.product.sourceType==="manual"?"manual-source-tag":""}`}>{group.product.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span></button>
+            <button className="history-toggle text-button" onClick={()=>toggleEuronextHistory(group.product)}>{historyOpenIsin===group.isin?"Masquer le graphique":"Graphique historique"}</button>
             {group.product.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(group.isin)}>Retirer cet ajout manuel</button>}
-            {expanded.has(group.isin)&&<div className="listing-detail">{group.listings.map((item,i)=><div className="listing-row" key={item.ticker+"-"+i}><span><strong>{item.ticker}</strong><small>{exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className={`market-value ${euronextTrades[item.isin]?.status==="trade_found"?"market-value-current":""}`}>{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="performance-value">{[["1 an",item.performance1y],["3 ans",item.performance3y],["5 ans",item.performance5y],["10 ans",item.performance10y]].map(([label,value])=><span key={label}>{label} <strong>{value!==null&&value!==undefined?Number(value).toLocaleString("fr-FR",{maximumFractionDigits:2})+" %":"—"}</strong></span>)}</span><span className="risk-value">{item.srri&&/^[1-7]$/.test(item.srri)?<><strong>{item.srri} / 7</strong><small>SRRI Amundi</small></>:"Indisponible"}</span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}</div>)}</div>}
-          </div>):filtered.map((item,i)=><div className="listing-row standalone" key={item.isin+"-"+item.ticker+"-"+i}><span><strong>{item.name}</strong><small>{item.ticker} · {exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className={`market-value ${euronextTrades[item.isin]?.status==="trade_found"?"market-value-current":""}`}>{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="performance-value">{[["1 an",item.performance1y],["3 ans",item.performance3y],["5 ans",item.performance5y],["10 ans",item.performance10y]].map(([label,value])=><span key={label}>{label} <strong>{value!==null&&value!==undefined?Number(value).toLocaleString("fr-FR",{maximumFractionDigits:2})+" %":"—"}</strong></span>)}</span><span className="risk-value">{item.srri&&/^[1-7]$/.test(item.srri)?<><strong>{item.srri} / 7</strong><small>SRRI Amundi</small></>:"Indisponible"}</span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}</div>)}
+            {expanded.has(group.isin)&&<div className="listing-detail">{group.listings.map((item,i)=><Fragment key={item.ticker+"-"+i}><div className="listing-row"><span><strong>{item.ticker}</strong><small>{exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className={`market-value ${euronextTrades[item.isin]?.status==="trade_found"?"market-value-current":""}`}>{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="performance-value">{[["1 an",item.performance1y],["3 ans",item.performance3y],["5 ans",item.performance5y],["10 ans",item.performance10y]].map(([label,value])=><span key={label}>{label} <strong>{value!==null&&value!==undefined?Number(value).toLocaleString("fr-FR",{maximumFractionDigits:2})+" %":"—"}</strong></span>)}</span><span className="risk-value">{item.srri&&/^[1-7]$/.test(item.srri)?<><strong>{item.srri} / 7</strong><small>SRRI Amundi</small></>:"Indisponible"}</span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}<button className="history-toggle text-button" onClick={()=>toggleEuronextHistory(item)}>{historyOpenIsin===item.isin?"Masquer":"Graphique"}</button></span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}<button className="history-toggle text-button" onClick={()=>toggleEuronextHistory(item)}>{historyOpenIsin===item.isin?"Masquer":"Graphique"}</button></div>{historyOpenIsin===item.isin&&<div className="history-chart-wrap">{historyLoadingIsin===item.isin?<div className="history-empty">Chargement de l’historique Euronext…</div>:historyByIsin[item.isin]?<MarketHistoryChart title={item.name} history={historyByIsin[item.isin]}/>:null}</div>}</Fragment>)}</div>}
+            {historyOpenIsin===group.isin&&<div className="history-chart-wrap">{historyLoadingIsin===group.isin?<div className="history-empty">Chargement de l’historique Euronext…</div>:historyByIsin[group.isin]?<MarketHistoryChart title={group.product.name} history={historyByIsin[group.isin]}/>:null}</div>}
+          </div>):filtered.map((item,i)=><Fragment key={item.isin+"-"+item.ticker+"-"+i}><div className="listing-row standalone"><span><strong>{item.name}</strong><small>{item.ticker} · {exchangeFromTicker(item.ticker)}</small></span><span className="mono">{item.isin}</span><span>{item.currency}</span><span>{item.ongoingCharges||"—"}</span><span className="nav-value">{item.nav ? `${item.nav} ${item.currency}` : "Indisponible"}</span><span className="nav-date">{item.navDate ? `VL du ${item.navDate}` : "Date non publiée"}</span><span className={`market-value ${euronextTrades[item.isin]?.status==="trade_found"?"market-value-current":""}`}>{euronextTrades[item.isin]?.status==="trade_found" ? `${euronextTrades[item.isin].price} ${euronextTrades[item.isin].currency||item.currency}` : euronextLoading?"Chargement…":"Indisponible"}<small>{euronextTrades[item.isin]?.tradeTime?new Date(euronextTrades[item.isin].tradeTime!).toLocaleString("fr-FR",{timeZone:"Europe/Paris"}):"Aucun échange identifié sur 1 h"}</small></span><span className="performance-value">{[["1 an",item.performance1y],["3 ans",item.performance3y],["5 ans",item.performance5y],["10 ans",item.performance10y]].map(([label,value])=><span key={label}>{label} <strong>{value!==null&&value!==undefined?Number(value).toLocaleString("fr-FR",{maximumFractionDigits:2})+" %":"—"}</strong></span>)}</span><span className="risk-value">{item.srri&&/^[1-7]$/.test(item.srri)?<><strong>{item.srri} / 7</strong><small>SRRI Amundi</small></>:"Indisponible"}</span><span className={`source-tag ${item.sourceType==="manual"?"manual-source-tag":""}`}>{item.sourceType==="manual"?"AJOUT MANUEL":"SOURCE AMUNDI"}</span>{item.sourceType==="manual"&&<button className="remove-manual-button" onClick={()=>removeManualProduct(item.isin)} aria-label={"Supprimer "+item.name}>Retirer</button>}</div>{historyOpenIsin===item.isin&&<div className="history-chart-wrap">{historyLoadingIsin===item.isin?<div className="history-empty">Chargement de l’historique Euronext…</div>:historyByIsin[item.isin]?<MarketHistoryChart title={item.name} history={historyByIsin[item.isin]}/>:null}</div>}</Fragment>)}
           {filtered.length===0&&<div className="catalog-message">Aucun produit ne correspond à ces critères.</div>}
         </div>}
         {!loading&&!catalogError&&!catalog&&<div className="catalog-message">Le catalogue officiel sera chargé à l'ouverture de cette page.</div>}
@@ -286,7 +381,7 @@ function App() {
                 const selected=contract.euroPerformance?.[assuranceSortPeriod];
                 const ranked=selected?.annualizedPct!==null && selected?.annualizedPct!==undefined;
                 return <div className="insurance-performance-row" key={contract.slug}>
-                  <span className="insurance-contract-cell"><b>{ranked?index+1:"—"}</b><strong>{contract.name}</strong><small>{contract.insurer??"Assureur non renseigné"}{contract.distributor?" · "+contract.distributor:""} · {contract.euroFund??"Fonds euros non référencé"}</small><small>{contract.etfCount??"n.c."} ETF · {contract.supportCount??"n.c."} supports · {contract.management??"Gestion non précisée"}</small></span>
+                  <span className="insurance-contract-cell"><b>{ranked?index+1:"—"}</b><strong>{contract.name}</strong><small>{contract.insurer??"Assureur non renseigné"}{contract.distributor?" · "+contract.distributor:""} · {contract.euroFund??"Fonds euros non référencé"}</small><small>{contract.etfCount??"n.c."} ETF · {contract.supportCount??"n.c."} supports · {contract.management??"Gestion non précisée"}</small><button className="text-button history-toggle" onClick={()=>setAssuranceHistorySlug(assuranceHistorySlug===contract.slug?null:contract.slug)}>{assuranceHistorySlug===contract.slug?"Masquer l’historique":"Historique annuel"}</button></span>
                   {(["1","3","5","8"] as AssuranceSortPeriod[]).map(period=>{
                     const result=contract.euroPerformance?.[period];
                     return <span className={assuranceSortPeriod===period?"sorted-period":""} key={period}>{result?.annualizedPct===null||result?.annualizedPct===undefined?"n.c.":<><strong>{result.annualizedPct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} % / an</strong><small>{result.cumulativePct===null?"":result.cumulativePct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" % cumulés"}</small></>}</span>;
@@ -295,6 +390,7 @@ function App() {
               })}
               {filteredAssuranceContracts.length===0&&<div className="catalog-message">Aucun contrat ne correspond à cette recherche.</div>}
             </div>
+            {assuranceHistorySlug&&(()=>{const selected=filteredAssuranceContracts.find(contract=>contract.slug===assuranceHistorySlug);return selected?<AnnualRateChart title={selected.name+" · "+(selected.euroFund??"Fonds euros")} rates={selected.annualRates??[]} sourceUrl={selected.rateSourceUrl} checkedAt={selected.rateCheckedAt}/>:null;})()}
           </section>
           <div className="catalog-summary"><strong>Frais et caractéristiques des contrats</strong><span className="muted small">Les données ETF et supports sont informatives, jamais un filtre</span></div>
           <div className="catalog-table-wrap insurance-table"><div className="insurance-table-head"><span>CONTRAT / ASSUREUR</span><span>FRAIS VERSEMENT</span><span>GESTION UC</span><span>GESTION €</span><span>ARBITRAGE</span><span>FONDS € 2025</span><span>ETF / SUPPORTS</span><span>MINIMUM</span></div>

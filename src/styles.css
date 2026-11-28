@@ -88,3 +88,36 @@
 .market-value-current{color:#267348}
 @media(max-width:1100px){.catalog-table-head,.product-parent,.listing-row{min-width:1180px;grid-template-columns:1.55fr 1.05fr .45fr .58fr .72fr .68fr .88fr 1.38fr .55fr .72fr}}
 @media(max-width:760px){.catalog-table-head,.product-parent,.listing-row{min-width:1180px}}
+
+
+/* Graphiques historiques ETF et fonds euros. */
+.history-toggle{display:inline-flex;align-items:center;margin:5px 8px;font-size:10px;white-space:nowrap}
+.history-chart-wrap{padding:10px 14px 16px;background:#f8faf7;border-top:1px solid #e8ede6}
+.history-chart-panel{margin:8px 0 14px;padding:17px 18px;background:#fff;border:1px solid #e4eae1;border-radius:10px;min-width:0}
+.history-chart-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:8px}
+.history-chart-heading>div:first-child{display:grid;gap:5px;min-width:0}
+.history-chart-heading strong{font:700 13px Manrope,sans-serif;color:#314236}
+.history-chart-heading small,.history-chart-current small{font-size:10px;color:#879389}
+.history-chart-current{display:grid;gap:4px;text-align:right;white-space:nowrap}
+.history-chart-current strong{font:700 16px Manrope;color:#2d6844}
+.history-line-chart,.annual-bar-chart{display:block;width:100%;height:auto;overflow:visible}
+.history-line-chart line,.annual-bar-chart line{stroke:#e6ece4;stroke-width:1}
+.history-line-chart path{fill:none;stroke:#39845a;stroke-width:2.7;stroke-linecap:round;stroke-linejoin:round}
+.history-line-chart circle{fill:#39845a}
+.history-line-chart text,.annual-bar-chart text{font:10px 'DM Sans',sans-serif;fill:#879389}
+.annual-bar-chart rect{fill:#70966a}
+.history-chart-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#879389;font-size:10px}
+.history-chart-foot a{color:#607b51;text-decoration:underline}
+.history-chart-panel>p{margin:9px 0 0;color:#879389;font-size:10px;line-height:1.55}
+.history-empty{padding:16px 18px;margin:8px 0;background:#fff;border:1px dashed #d8e0d4;border-radius:8px;color:#7a877d;font-size:11px}
+.insurance-contract-cell .history-toggle{grid-column:2;justify-self:start;margin:2px 0 0;padding:0}
+@media(max-width:600px){.history-chart-panel{padding:13px 10px}.history-chart-heading{flex-direction:column}.history-chart-current{text-align:left}.history-line-chart text,.annual-bar-chart text{font-size:11px}}
+
+
+.history-annual-performance{margin:12px 0 4px;padding:12px 13px;background:#f7faf6;border:1px solid #e8eee5;border-radius:8px}
+.history-annual-performance>strong{display:block;margin-bottom:9px;color:#667468;font-size:10px}
+.history-annual-performance>div{display:flex;gap:8px;flex-wrap:wrap}
+.history-annual-performance>div>span{display:grid;gap:4px;min-width:105px;padding:8px 10px;background:#fff;border:1px solid #e7ece5;border-radius:6px}
+.history-annual-performance b{font-size:10px;color:#7a877d}
+.history-annual-performance strong{font:700 13px Manrope,sans-serif;color:#2f7048}
+.history-annual-performance small{font-size:9px;color:#929b93}
