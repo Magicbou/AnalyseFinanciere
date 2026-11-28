@@ -7,7 +7,7 @@ import {
 } from "../../../src/lib/amundi-parser";
 
 type PagesContext = { request: Request };
-const SOURCE_URL = "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche";
+const SOURCE_URL = "https://www.amundietf.fr/fr/professionnels/produits-etf/recherche";
 const PAGE_SIZE = 50;
 const HEADERS = {
   Accept: "text/html,application/xhtml+xml",
