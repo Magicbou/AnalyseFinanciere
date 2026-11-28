@@ -17,6 +17,7 @@ describe("Amundi public catalogue parser", () => {
     ["654 produit(s)trouvé(s)", 654],
     ["<span><strong>654</strong></span> <span>produit(s)</span><span>trouvé(s)</span>", 654],
     ["654&nbsp;produit(s)&nbsp;trouvé(s)", 654],
+    ["<div>0 produit(s)trouvé(s)</div><span>654 produit(s)trouvé(s)</span>", 654],
     ["<div class=\"count\">1 234</div><span>produits trouvés</span>", 1234]
   ])("extracts the visible official total from HTML: %s", (html, expected) => {
     expect(extractAmundiTotal(html)).toBe(expected);
