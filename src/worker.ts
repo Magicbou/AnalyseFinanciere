@@ -448,7 +448,9 @@ async function getEuronextHistory(request: Request): Promise<Response> {
     return json({ status: "invalid_request", message: "ISIN ou code de marché Euronext invalide." }, 400);
   }
   const today = new Date();
-  const to = url.searchParams.get("to") ?? today.toISOString().slice(0,10);
+  const yesterday = new Date(today);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const to = url.searchParams.get("to") ?? yesterday.toISOString().slice(0,10);
   const defaultFrom = new Date(today);
   defaultFrom.setUTCFullYear(defaultFrom.getUTCFullYear() - 2);
   const from = url.searchParams.get("from") ?? defaultFrom.toISOString().slice(0,10);
@@ -456,7 +458,7 @@ async function getEuronextHistory(request: Request): Promise<Response> {
   const toTime = Date.parse(to + "T00:00:00Z");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)
     || !Number.isFinite(fromTime) || !Number.isFinite(toTime) || fromTime > toTime
-    || toTime > Date.parse(today.toISOString().slice(0,10) + "T00:00:00Z")
+    || toTime > Date.parse(yesterday.toISOString().slice(0,10) + "T00:00:00Z")
     || fromTime < Date.parse(defaultFrom.toISOString().slice(0,10) + "T00:00:00Z")) {
     return json({ status: "invalid_request", message: "InvestPilot limite cette première version aux deux dernières années." }, 400);
   }
@@ -473,7 +475,7 @@ async function getEuronextHistory(request: Request): Promise<Response> {
         Referer: sourceUrl,
         "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.6)"
       },
-      body: new URLSearchParams({ adjusted: "Y", startdate: from, enddate: to, nbSession: "520" })
+      body: new URLSearchParams({ adjusted: "Y", startdate: from, enddate: to, nbSession: "10" })
     });
     if (!response.ok) return json({
       status: "source_unavailable", source: sourceUrl, retrievedAt,
