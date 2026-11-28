@@ -8,6 +8,8 @@ export type AmundiCatalogProduct = {
   sourceType?: "amundi" | "manual";
   manualSource?: string | null;
   manualAddedAt?: string | null;
+  certificationStatus?: "certified" | "partial" | "unverified";
+  certificationReason?: string | null;
 };
 
 export type AmundiCatalogResponse = {
