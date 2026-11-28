@@ -354,6 +354,8 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         excludedByFranceInstitutionalVisibility: activeProducts.length - visibleProducts.length,
         visibleProductRecords: visibleProducts.length,
         uniqueVisibleIsinCount: uniqueProducts.length,
+        missingNavCount: uniqueProducts.filter(product => !product.nav).length,
+        navWithoutPublicationDateCount: uniqueProducts.filter(product => Boolean(product.nav) && !product.navDate).length,
         missingIsinCount,
         duplicateIsinCount,
         country: context.countryName,
@@ -505,7 +507,7 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       if (request.method !== "GET") return json({ status: "method_not_allowed" }, 405, { Allow: "GET" });
       if (url.pathname === "/api/health") {
-        return json({ status: "ok", service: "investpilot-api", version: "0.5.0", timestamp: new Date().toISOString() });
+        return json({ status: "ok", service: "investpilot-api", version: "0.5.1", timestamp: new Date().toISOString() });
       }
       if (url.pathname === "/api/catalog/amundi") return getAmundiCatalog(request);
       if (url.pathname === "/api/market/fx") return getEcbFx();
