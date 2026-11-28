@@ -1,5 +1,3 @@
-import { buildAmundiPageUrls, countUniqueAmundiProducts, discoverAmundiPaginationLinks, extractAmundiTotal, parseAmundiRows } from "./lib/amundi-parser";
-
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
 }
@@ -170,226 +168,211 @@ async function getEuronextTrades(request: Request): Promise<Response> {
 }
 
 async function getAmundiCatalog(request: Request): Promise<Response> {
-  const search = (new URL(request.url).searchParams.get("q") || "").trim().toLowerCase();
-  const headers = {
-    Accept: "text/html,application/xhtml+xml",
-    "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.5; +catalogue source attribution)",
-    Referer: AMUNDI_SOURCE
+  const search = (new URL(request.url).searchParams.get("q") || "").trim().toLocaleLowerCase("fr-FR");
+  const apiUrl = new URL("/mapi/ProductAPI/getProductsData", AMUNDI_SOURCE).toString();
+  const context = {
+    countryName: "France",
+    countryCode: "FRA",
+    languageName: "French",
+    languageCode: "fr",
+    userProfileName: "INSTIT",
+    bcp47Code: "fr-FR"
   };
+  const characteristics = [
+    "ISIN", "TICKER", "TER", "IS_CLIMATE", "SHARE_MARKETING_NAME", "CURRENCY", "AUM", "WKN",
+    "MNEMO", "INDEX_TICKER", "EXCHANGE_PLACE", "INCEPTION_DATE", "AUM_IN_EURO", "FUND_AUM_IN_EURO",
+    "NAV", "NAV_DATE_DISPLAYED", "FUND_TYPE", "FUND_REPLICATION_METHODOLOGY", "FUND_SFDR_CLASSIFICATION",
+    "FUND_ISR_LABEL", "STRATEGY", "SUBASSET_CLASS", "ASSET_CLASS", "ESG_SCOPE", "ESG_SCOPES",
+    "INVESTMENT_ZONE", "IMPACT", "CATEGORY", "DISTRIBUTION_POLICY", "CURRENCY_HEDGE", "FUND_PEA",
+    "MAIN_LISTING", "CORE", "IS_ESG", "FUND_ISSUER", "IS_THEMATIC", "MAIN_LISTINGS", "ETF_CLASSIFICATION2",
+    "IS_CORE", "LEVERAGE", "OLD_ISINS", "OLD_WKNS", "OLD_SHARE_MARKETING_NAMES", "INSURANCE_CONTRACTS_COUNT",
+    "INSURANCE_PAGE_URL", "FUND_DOMICILIATION_COUNTRY", "SRRI", "LISTING_PLACES", "DESCRIPTIF",
+    "IS_BEING_ABSORBED", "IS_BEING_ABSORBED_BY", "MARKET", "SHARE_TYPE", "IS_ACTIVELY_MANAGED",
+    "SHARE_CLASS_TYPE", "VISIBILITY_EXCEPTIONS"
+  ];
+  const metrics = ["ONE_YEAR", "THREE_YEARS", "FIVE_YEARS", "YEAR_TO_DATE", "TEN_YEARS"]
+    .map(period => ({ indicator: "PERFORMANCE", period }));
+  const retrievedAt = new Date().toISOString();
+  const sourceHeaders = {
+    Accept: "application/json, text/plain, */*",
+    "Content-Type": "application/json",
+    Origin: new URL(AMUNDI_SOURCE).origin,
+    Referer: AMUNDI_SOURCE,
+    "User-Agent": "Mozilla/5.0 (compatible; InvestPilot/0.5; +catalogue source attribution)"
+  };
+
   try {
-    const firstResponse = await fetch(AMUNDI_SOURCE, { headers });
-    if (!firstResponse.ok) {
-      return json({ status: "source_unavailable", source: AMUNDI_SOURCE, upstreamStatus: firstResponse.status, products: [] }, 502);
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: sourceHeaders,
+      body: JSON.stringify({
+        sortCriterias: [],
+        characteristics,
+        metrics,
+        context,
+        productType: "ALL",
+        historics: [],
+        url: true,
+        filters: []
+      })
+    });
+    if (!response.ok) {
+      return json({
+        status: "source_unavailable",
+        source: AMUNDI_SOURCE,
+        apiSource: apiUrl,
+        retrievedAt,
+        upstreamStatus: response.status,
+        products: [],
+        message: "L'API officielle Amundi est indisponible. Aucun ancien catalogue ni chiffre de remplacement n'est affiché."
+      }, 502);
     }
 
-    const firstPage = await firstResponse.text();
-    const apiUrl = new URL("/mapi/ProductAPI/getProductsData", AMUNDI_SOURCE).toString();
-    const apiCharacteristics = [
-      "ISIN", "TICKER", "TER", "IS_CLIMATE", "SHARE_MARKETING_NAME", "CURRENCY", "AUM", "WKN",
-      "MNEMO", "INDEX_TICKER", "EXCHANGE_PLACE", "INCEPTION_DATE", "AUM_IN_EURO", "FUND_AUM_IN_EURO",
-      "NAV", "NAV_DATE_DISPLAYED", "FUND_TYPE", "FUND_REPLICATION_METHODOLOGY", "FUND_SFDR_CLASSIFICATION",
-      "FUND_ISR_LABEL", "STRATEGY", "SUBASSET_CLASS", "ASSET_CLASS", "ESG_SCOPE", "ESG_SCOPES",
-      "INVESTMENT_ZONE", "IMPACT", "CATEGORY", "DISTRIBUTION_POLICY", "CURRENCY_HEDGE", "FUND_PEA",
-      "MAIN_LISTING", "CORE", "IS_ESG", "FUND_ISSUER", "IS_THEMATIC", "MAIN_LISTINGS", "ETF_CLASSIFICATION2",
-      "IS_CORE", "LEVERAGE", "OLD_ISINS", "OLD_WKNS", "OLD_SHARE_MARKETING_NAMES", "INSURANCE_CONTRACTS_COUNT",
-      "INSURANCE_PAGE_URL", "FUND_DOMICILIATION_COUNTRY", "SRRI", "LISTING_PLACES", "DESCRIPTIF",
-      "IS_BEING_ABSORBED", "IS_BEING_ABSORBED_BY", "MARKET", "SHARE_TYPE", "IS_ACTIVELY_MANAGED",
-      "SHARE_CLASS_TYPE", "VISIBILITY_EXCEPTIONS"
-    ];
-    const apiMetrics = ["ONE_YEAR", "THREE_YEARS", "FIVE_YEARS", "YEAR_TO_DATE", "TEN_YEARS"]
-      .map(period => ({ indicator: "PERFORMANCE", period }));
-    const apiProbes = await Promise.all(["INSTIT", "RETAIL"].map(async userProfileName => {
-      const context = {
-        countryName: "France", countryCode: "FRA", languageName: "French",
-        languageCode: "fr", userProfileName, bcp47Code: "fr-FR"
+    const payload = await response.json() as {
+      products?: Array<{
+        productId?: string;
+        productType?: string;
+        characteristics?: Record<string, unknown>;
+        metrics?: Array<{ indicator?: string; period?: string; value?: unknown }>;
+      }>;
+    };
+    if (!Array.isArray(payload.products)) {
+      return json({
+        status: "unparsed_source", source: AMUNDI_SOURCE, apiSource: apiUrl,
+        retrievedAt, products: [],
+        message: "Le format de réponse de l'API Amundi a changé. Aucune donnée n'a été importée."
+      }, 502);
+    }
+
+    const allProducts = payload.products;
+    const activeProducts = allProducts.filter(product => product.productType === "PRODUCT");
+    const visibleProducts = activeProducts.filter(product => {
+      const exceptions = product.characteristics?.VISIBILITY_EXCEPTIONS;
+      if (!Array.isArray(exceptions)) return true;
+      return !exceptions.some((exception: unknown) => {
+        if (!exception || typeof exception !== "object") return false;
+        const item = exception as { countryCode?: unknown; userProfileName?: unknown };
+        return String(item.countryCode ?? "").toUpperCase() === context.countryCode
+          && String(item.userProfileName ?? "").toUpperCase() === context.userProfileName;
+      });
+    });
+
+    const asText = (value: unknown): string => {
+      if (typeof value === "string") return value.trim();
+      if (typeof value === "number" && Number.isFinite(value)) return String(value);
+      return "";
+    };
+    const asNumberText = (value: unknown): string | null => {
+      if (typeof value !== "number" || !Number.isFinite(value)) return null;
+      return String(value);
+    };
+    const formatDate = (value: unknown): string | null => {
+      if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return null;
+      return new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric"
+      }).format(date);
+    };
+
+    const mapped = visibleProducts.flatMap(product => {
+      const data = product.characteristics ?? {};
+      const isin = asText(data.ISIN).toUpperCase();
+      const name = asText(data.SHARE_MARKETING_NAME);
+      if (!/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin) || !name) return [];
+      const listings = data.MAIN_LISTINGS && typeof data.MAIN_LISTINGS === "object"
+        ? data.MAIN_LISTINGS as Record<string, unknown> : {};
+      const ticker = asText(listings[context.countryCode])
+        || asText(listings.DEU)
+        || asText(Object.values(listings)[0])
+        || asText(data.MNEMO);
+      const productMetrics = product.metrics ?? [];
+      const performance = (period: string) => {
+        const value = productMetrics.find(item => item.indicator === "PERFORMANCE" && item.period === period)?.value;
+        return asNumberText(value);
       };
-      try {
-        const response = await fetch(apiUrl, {
-          method: "POST",
-          headers: {
-            Accept: "application/json, text/plain, */*",
-            "Content-Type": "application/json",
-            Origin: new URL(AMUNDI_SOURCE).origin,
-            Referer: AMUNDI_SOURCE,
-            "User-Agent": headers["User-Agent"]
-          },
-          body: JSON.stringify({
-            sortCriterias: [], characteristics: apiCharacteristics, metrics: apiMetrics,
-            context, productType: "ALL", historics: [], url: true, filters: []
-          })
-        });
-        const raw = await response.text();
-        let data: any = null;
-        try { data = JSON.parse(raw); } catch { /* retain a short response sample */ }
-        return {
-          userProfileName, status: response.status, responseLength: raw.length,
-          responseKeys: data && typeof data === "object" ? Object.keys(data) : [],
-          productCount: Array.isArray(data?.products) ? data.products.length : null,
-          productTypeCounts: Array.isArray(data?.products) ? data.products.reduce((counts: Record<string, number>, product: any) => {
-            const type = String(product.productType ?? "UNKNOWN");
-            counts[type] = (counts[type] ?? 0) + 1;
-            return counts;
-          }, {}) : {},
-          activeProductCount: Array.isArray(data?.products) ? data.products.filter((product: any) => product.productType === "PRODUCT").length : null,
-          uniqueIsinCount: Array.isArray(data?.products) ? new Set(data.products.filter((product: any) => product.productType === "PRODUCT").map((product: any) => String(product.characteristics?.ISIN ?? "").trim().toUpperCase()).filter(Boolean)).size : null,
-          missingIsinCount: Array.isArray(data?.products) ? data.products.filter((product: any) => product.productType === "PRODUCT" && !product.characteristics?.ISIN).length : null,
-          hiddenForFranceInstitCount: Array.isArray(data?.products) ? data.products.filter((product: any) => product.productType === "PRODUCT" && Array.isArray(product.characteristics?.VISIBILITY_EXCEPTIONS) && product.characteristics.VISIBILITY_EXCEPTIONS.some((exception: any) => exception.countryCode === "FRA" && exception.userProfileName === "INSTIT")).length : null,
-          productKeys: data?.products?.[0] ? Object.keys(data.products[0]) : [],
-          characteristicKeys: data?.products?.[0]?.characteristics ? Object.keys(data.products[0].characteristics) : [],
-          sampleProduct: data?.products?.find((product: any) => product.productType === "PRODUCT") ? {
-            productId: data.products.find((product: any) => product.productType === "PRODUCT").productId,
-            productType: data.products.find((product: any) => product.productType === "PRODUCT").productType,
-            characteristics: data.products.find((product: any) => product.productType === "PRODUCT").characteristics,
-            currencies: data.products.find((product: any) => product.productType === "PRODUCT").currencies,
-            metrics: data.products.find((product: any) => product.productType === "PRODUCT").metrics
-          } : null,
-          sample: data ? null : raw.slice(0, 500)
-        };
-      } catch (error) {
-        return { userProfileName, error: error instanceof Error ? error.message : "API request failed" };
-      }
-    }));
-    const widgetScriptMatch = firstPage.match(/<script\b[^>]*src=["']([^"']*\/etf-finder\/[^"']*\.js[^"']*)["']/i);
-    const widgetScriptUrl = widgetScriptMatch?.[1] ? new URL(widgetScriptMatch[1], AMUNDI_SOURCE).toString() : null;
-    let widgetScriptText = "";
-    let widgetScriptStatus: number | null = null;
-    if (widgetScriptUrl) {
-      try {
-        const widgetResponse = await fetch(widgetScriptUrl, { headers });
-        widgetScriptStatus = widgetResponse.status;
-        if (widgetResponse.ok) widgetScriptText = await widgetResponse.text();
-      } catch { /* diagnostic only; the catalogue remains source-controlled */ }
-    }
-    const widgetApiStrings = [...new Set(widgetScriptText.match(/["'`](?:https?:\/\/|\/)[^"'`]{3,180}["'`]/g) ?? [])]
-      .filter(value => /api|search|product|finder|etf|data/i.test(value)).slice(0, 40);
-    const widgetFunctionHints = [...widgetScriptText.matchAll(/.{0,100}(?:fetch\(|XMLHttpRequest|axios|apiUrl|baseUrl|pageSize|pageNum|totalItems|searchEndpoint).{0,100}/gi)]
-      .slice(0, 30).map(match => match[0].replace(/\s+/g, " ").trim().slice(0, 220));
-    const widgetTerms = ["getProductsData", "ProductAPI", "ETF_FINDER", "productsSize", "finderAPIResponse", "getProductsData(", "getProductsData:", "getProductsData=", "initFinder", "searchProducts", "domainMap"];
-    const widgetCallSites = ["getContextFromLocalStorage(){", "getContextFromLocalStorage()", "localStorage.setItem", "countryName:", "userProfileName:", "userProfileSlug:", "let At=", "const At=", "At=(()=>", "getProductsData"].flatMap(term => {
-      const indexes: number[] = [];
-      let from = 0;
-      while (indexes.length < 120) {
-        const index = widgetScriptText.indexOf(term, from);
-        if (index < 0) break;
-        indexes.push(index);
-        from = index + term.length;
-      }
-      return indexes.slice(-6).map(index => ({
-        term,
-        index,
-        snippet: widgetScriptText.slice(Math.max(0, index - 1200), Math.min(widgetScriptText.length, index + 2800))
-      }));
-    });
-    const finderWidgetMarkup = [...firstPage.matchAll(/<[^>]*(?:etf-finder|finder-widget)[^>]*>/gi)].slice(0, 10).map(match => match[0].slice(0, 3000));
-    const widgetTermSnippets = widgetTerms.map(term => {
-      const index = widgetScriptText.indexOf(term);
-      return index < 0 ? null : { term, snippet: widgetScriptText.slice(Math.max(0, index - 220), index + 520) };
-    }).filter((value): value is { term: string; snippet: string } => value !== null);
-    const sourceTotal = extractAmundiTotal(firstPage);
-    // Amundi renders 50 products on the initial page; its pager is JavaScript,
-    // so the remaining numbered pages must also be requested explicitly.
-    const pageUrls = [...new Set([
-      ...discoverAmundiPaginationLinks(firstPage, AMUNDI_SOURCE),
-      ...buildAmundiPageUrls(AMUNDI_SOURCE, sourceTotal, 50)
-    ])].filter(url => {
-      try {
-        const parsed = new URL(url);
-        return parsed.origin === new URL(AMUNDI_SOURCE).origin && parsed.pathname === new URL(AMUNDI_SOURCE).pathname;
-      } catch { return false; }
+      const exposure = asText(data.INVESTMENT_ZONE)
+        || asText(data.ETF_CLASSIFICATION2)
+        || asText(data.ASSET_CLASS)
+        || asText(data.SUBASSET_CLASS)
+        || asText(data.MARKET)
+        || asText(data.DESCRIPTIF);
+      const ter = asNumberText(data.TER);
+      return [{
+        ticker,
+        wkn: asText(data.WKN),
+        name,
+        isin,
+        currency: asText(data.CURRENCY) || asText((product as any).currencies?.CURRENCY) || "",
+        ongoingCharges: ter === null ? null : `${ter} %`,
+        assetsUnderManagement: asNumberText(data.FUND_AUM_IN_EURO)
+          ?? asNumberText(data.AUM_IN_EURO)
+          ?? asNumberText(data.AUM),
+        sfdr: asText(data.FUND_SFDR_CLASSIFICATION) || null,
+        exposure: exposure || null,
+        nav: asNumberText(data.NAV),
+        navDate: formatDate(data.NAV_DATE_DISPLAYED),
+        performanceYtd: performance("YEAR_TO_DATE"),
+        performance1y: performance("ONE_YEAR"),
+        sourceUrl: AMUNDI_SOURCE,
+        sourceType: "amundi" as const
+      }];
     });
 
-    const pageResults = await Promise.all(pageUrls.map(async url => {
-      try {
-        const response = await fetch(url, { headers });
-        return response.ok
-          ? { url, html: await response.text(), failed: false }
-          : { url, html: "", failed: true };
-      } catch {
-        return { url, html: "", failed: true };
-      }
-    }));
-
-    const htmlPages = [firstPage];
-    let failedPages = pageResults.filter(page => page.failed).length;
-    const seenPageBodies = new Set([firstPage]);
-    for (const page of pageResults) {
-      if (page.failed || !page.html) continue;
-      // Some CDN responses ignore ?page=. Never count a repeated first page
-      // as a successful fetch of a different catalogue batch.
-      if (seenPageBodies.has(page.html)) {
-        failedPages += 1;
-        continue;
-      }
-      seenPageBodies.add(page.html);
-      htmlPages.push(page.html);
-    }
-
-    const rawRows = htmlPages.flatMap(html => parseAmundiRows(html, AMUNDI_SOURCE));
-    const products = [...new Map(rawRows.map(row => [row.isin + "|" + row.ticker, row])).values()];
-    const productCount = countUniqueAmundiProducts(products);
-    const navMissingCount = products.filter(product => !product.nav).length;
-    const navWithoutDateCount = products.filter(product => Boolean(product.nav) && !product.navDate).length;
-    const navDates = products.map(product => product.navDate).filter((value): value is string => Boolean(value))
-      .map(value => {
-        const [day, month, year] = value.split("/");
-        return { display: value, iso: `${year}-${month}-${day}` };
-      }).sort((a, b) => a.iso.localeCompare(b.iso));
-    const expectedPages = sourceTotal === null ? null : Math.ceil(sourceTotal / 50);
-    const allExpectedPagesFetched = expectedPages !== null && htmlPages.length === expectedPages;
-    const complete = sourceTotal !== null && productCount === sourceTotal && failedPages === 0 && allExpectedPagesFetched;
+    // One product may expose several listings; the application compares funds by ISIN.
+    const uniqueProducts = [...new Map(mapped.map(product => [product.isin, product])).values()];
+    const missingIsinCount = visibleProducts.filter(product => {
+      const isin = asText(product.characteristics?.ISIN).toUpperCase();
+      return !/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin);
+    }).length;
+    const duplicateIsinCount = mapped.length - uniqueProducts.length;
+    const complete = uniqueProducts.length > 500
+      && missingIsinCount === 0
+      && duplicateIsinCount === 0
+      && uniqueProducts.every(product => Boolean(product.isin && product.name));
     const filtered = search
-      ? products.filter(product => [product.name, product.isin, product.ticker, product.wkn, product.exposure].some(value => value?.toLowerCase().includes(search) ?? false))
-      : products;
+      ? uniqueProducts.filter(product => [
+          product.name, product.isin, product.ticker, product.wkn, product.exposure,
+          product.currency, product.sfdr
+        ].some(value => value.toLocaleLowerCase("fr-FR").includes(search)))
+      : uniqueProducts;
+
     return json({
-      status: products.length ? "ok" : "unparsed_source",
+      status: complete ? "ok" : "unparsed_source",
       source: AMUNDI_SOURCE,
-      retrievedAt: new Date().toISOString(),
-      sourceTotal,
-      productCount,
-      listingCount: products.length,
+      apiSource: apiUrl,
+      retrievedAt,
+      sourceTotal: uniqueProducts.length,
+      productCount: uniqueProducts.length,
+      listingCount: mapped.length,
       returnedCount: filtered.length,
-      pageCount: htmlPages.length,
+      pageCount: 1,
       completeness: complete ? "complete" : "partial",
       audit: {
-        apiUrl,
-        apiProbes,
-        widgetScriptUrl,
-        widgetScriptStatus,
-        widgetScriptLength: widgetScriptText.length,
-        widgetApiStrings,
-        widgetTermSnippets,
-        widgetCallSites,
-        finderWidgetMarkup,
-        widgetFunctionHints,
-        sourceHtmlLength: firstPage.length,
-        sourceScriptUrls: [...firstPage.matchAll(/<script\b[^>]*src=["']([^"']+)["']/gi)]
-          .map(match => match[1]).slice(0, 30),
-        sourceApiHints: [...firstPage.matchAll(/.{0,90}(?:api|ajax|json|graphql|pageSize|pageNum|finder|search).{0,90}/gi)]
-          .slice(0, 20).map(match => match[0].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220)),
-        sourceMarkerFound: firstPage.includes("ETF_FINDER_SUMMARY"),
-        sourceHtmlTableRows: (firstPage.match(/<tr\b/gi) ?? []).length,
-        sourceProductMentions: [...firstPage.matchAll(/.{0,100}(?:produit|trouv).{0,100}/gi)].slice(0, 8)
-          .map(match => match[0].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220)),
-        sourceFirstTableRow: firstPage.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/i)?.[0].replace(/\s+/g, " ").slice(0, 1200) ?? null,
-        officialProductTotal: sourceTotal,
-        uniqueIsinCount: productCount,
-        parsedListingCount: rawRows.length,
-        uniqueListingCount: products.length,
-        duplicateListingRows: rawRows.length - products.length,
-        discoveredAdditionalPages: pageUrls.length,
-        fetchedPages: htmlPages.length,
-        failedPages,
-        missingNavCount: navMissingCount,
-        navWithoutPublicationDateCount: navWithoutDateCount,
-        oldestNavDate: navDates[0]?.display ?? null,
-        newestNavDate: navDates.at(-1)?.display ?? null,
-        completenessRule: "Complet uniquement si tous les lots attendus sont récupérés, sans page en échec, et si le nombre d'ISIN distincts égale le total officiel Amundi."
+        apiProductRecords: allProducts.length,
+        activeProductRecords: activeProducts.length,
+        excludedByFranceInstitutionalVisibility: activeProducts.length - visibleProducts.length,
+        visibleProductRecords: visibleProducts.length,
+        uniqueVisibleIsinCount: uniqueProducts.length,
+        missingIsinCount,
+        duplicateIsinCount,
+        country: context.countryName,
+        countryCode: context.countryCode,
+        profile: context.userProfileName,
+        completenessRule: "Catalogue complet si tous les produits actifs visibles pour le contexte France/INSTIT ont un ISIN valide et qu'aucun ISIN n'est dupliqué."
       },
-      notice: "Les valeurs liquidatives Amundi sont des valeurs publiées par l'émetteur, pas des cours de marché en temps réel. Les cours de marché sont fournis séparément lorsqu'une source de cotation les publie.",
+      notice: "Données issues de l'API officielle Amundi. Les valeurs liquidatives et performances sont celles publiées par l'émetteur, avec leur date propre ; elles ne constituent pas des cours de marché en temps réel.",
       products: filtered
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
-  } catch {
-    return json({ status: "source_unavailable", source: AMUNDI_SOURCE, products: [] }, 502);
+  } catch (error) {
+    return json({
+      status: "source_unavailable",
+      source: AMUNDI_SOURCE,
+      apiSource: apiUrl,
+      retrievedAt,
+      products: [],
+      message: error instanceof Error ? error.message : "Erreur de lecture de l'API officielle Amundi."
+    }, 502);
   }
 }
 
