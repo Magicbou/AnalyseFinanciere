@@ -448,7 +448,9 @@ async function getAssuranceVieContracts(): Promise<Response> {
       feesResponse.text().then(parseCsvDocument),
       euroResponse.text().then(parseCsvDocument)
     ]);
+    const feeBySlug = new Map(feeRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
     const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
+    const assuranceSlugs = [...new Set([...feeBySlug.keys(), ...euroBySlug.keys()])];
     const availableRateYears = Array.from({ length: 16 }, (_, index) => 2015 + index)
       .filter(year => year <= new Date().getUTCFullYear() - 1 && euroRows.some(row => nullableNumber(row[`taux_${year}_pct`]) !== null));
     const performanceEndYear = availableRateYears.length ? Math.max(...availableRateYears) : 2025;
@@ -466,10 +468,11 @@ async function getAssuranceVieContracts(): Promise<Response> {
         years, fromYear, toYear: performanceEndYear, observations
       };
     };
-    const contracts = feeRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => {
-      const euro = euroBySlug.get(row.slug) ?? {};
+    const contracts = assuranceSlugs.map(slug => {
+      const row = feeBySlug.get(slug) ?? {};
+      const euro = euroBySlug.get(slug) ?? {};
       return {
-        slug: row.slug,
+        slug,
         name: row.contrat || euro.contrat || row.slug,
         insurer: row.assureur || euro.assureur || null,
         distributor: row.courtier || euro.courtier || null,
