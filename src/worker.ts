@@ -738,7 +738,7 @@ async function getAssuranceVieContracts(env: Env): Promise<Response> {
 
 
 export default {
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_event: { cron?: string }, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil((async () => {
       const response = await fetch(INSURANCE_EURO_CSV, { headers: { Accept: "text/csv,*/*" } });
       if (!response.ok) throw new Error("Source fonds euros indisponible: HTTP " + response.status);
