@@ -65,3 +65,43 @@ Limite importante : l'endpoint de graphique Yahoo Finance est public mais non do
 Les graphiques assurance-vie utilisent les taux annuels publiés du fonds euros dans le jeu de données ouvert « taux des fonds euros des contrats d'assurance vie et PER ». Ils ne décrivent ni les unités de compte, ni les performances du contrat complet. Les années sans taux publié restent visibles comme « n.c. » et ne sont ni interpolées ni estimées.
 
 La collecte Euronext différée toutes les 15 minutes n'est pas un historique intraday : la publication réglementaire a jusqu'à 15 minutes de délai et les fichiers de transactions récents ne constituent pas une base historique durable. Aucun relevé intraday n'est reconstitué artificiellement.
+
+
+## Règle qualité obligatoire — ETF (à appliquer à chaque ISIN et à chaque cotation)
+
+Aucune valeur ETF ne doit être affichée comme vérifiée sur la seule base d'une correspondance de ticker supposée. Cette règle s'applique à l'ensemble du catalogue, et pas uniquement à un échantillon ou aux ETF Amundi.
+
+### Identité et rapprochement
+- L'ISIN est l'identifiant de la part/fonds ; il ne suffit pas à identifier une ligne de cotation.
+- Chaque cotation doit être décrite par le triplet ISIN + ticker exact publié par l'émetteur + place/MIC, avec devise et type de cotation.
+- Une conversion de suffixe (par exemple « FP » vers « .PA ») est une hypothèse technique, pas une preuve d'identité.
+- Avant d'associer un historique à un ISIN, vérifier que la source de marché retourne une identité de cotation compatible (symbole, place, devise) et que cette ligne est explicitement rattachée à l'ISIN dans une source officielle. Si le rapprochement n'est pas démontré, refuser la série et afficher « non vérifié »/« indisponible ».
+
+### Hiérarchie des sources
+1. Émetteur/gestionnaire (Amundi pour ses fonds) : identité, caractéristiques de la part, devise, politique de distribution, valeur liquidative, dates de VL, distributions et performances officielles publiées.
+2. Place de cotation officielle : transactions/cours de marché et métadonnées de cotation, dans la limite des droits et délais documentés.
+3. Fournisseur tiers (ex. Yahoo Finance) : source secondaire de série historique uniquement après validation instrument par instrument ; ne jamais la présenter comme source officielle de la place ou de l'émetteur.
+
+### Séries et calculs à ne pas confondre
+- VL, cours de clôture coté, cours ajusté et performance officielle sont quatre notions distinctes.
+- Une VL Amundi ne doit jamais être présentée comme un cours négocié.
+- Un cours ajusté tiers ne doit pas être présenté comme une VL ni comme une performance officielle.
+- Pour une part distribuante, vérifier le traitement des dividendes et fractionnements. Si la série ajustée, les distributions et leur réinvestissement ne sont pas documentés et contrôlés, ne pas qualifier le rendement de « total return ».
+- Les périodes, devises, dates de début/fin et conventions de calcul doivent être visibles et cohérentes. Aucun remplissage, interpolation, extrapolation ou remplacement silencieux d'une donnée absente.
+
+### Statut de validation par donnée
+Chaque série affichée doit exposer au minimum : ISIN, ticker et place/MIC rapprochés, source et URL, nature de la donnée (VL/cours/clôture ajustée/performance officielle), devise, date de l'observation la plus récente, date de récupération, statut temps réel/différé/EOD, méthode de calcul et statut de validation.
+- « Vérifié » uniquement si l'identité, la provenance, la devise, les dates et la méthode ont passé les contrôles.
+- « Partiellement vérifié » si un contrôle secondaire manque ; afficher explicitement lequel et ne pas présenter la donnée comme certifiée.
+- « Non vérifié » ou « indisponible » si l'identité ou la provenance ne peut pas être démontrée ; ne pas tracer de courbe ni calculer de performance à partir de cette série.
+
+### Audit exhaustif avant certification du catalogue
+L'audit doit couvrir 100 % des ISIN du catalogue et 100 % des lignes de cotation utilisées dans les graphiques, et non un simple échantillon. Pour chaque ligne, conserver le résultat de résolution, la source consultée, les champs comparés, l'horodatage, les écarts et la décision. Les échecs et absences doivent être comptés et consultables. La complétude du catalogue ne signifie pas que les historiques ou les cotations sont validés.
+
+### État réel au 28 novembre 2026
+- Le catalogue et les caractéristiques sont récupérés depuis l'API du site officiel Amundi.
+- Le graphique ETF du code actuel interroge Yahoo Finance en construisant le symbole à partir du ticker Amundi et d'une table de suffixes. Le code valide le format de l'ISIN, mais ne démontre pas actuellement que le symbole Yahoo retourné correspond à cet ISIN et à la ligne/place exacte.
+- En conséquence, les historiques Yahoo ne sont pas encore certifiés instrument par instrument. Ils ne doivent pas être décrits comme « validés » tant que le rapprochement exhaustif ci-dessus n'est pas implémenté et exécuté.
+- La fiche officielle Amundi et l'historique de VL doivent être privilégiés pour contrôler la part. Les cours boursiers restent une série séparée.
+
+Cette règle est bloquante : aucune couverture de 654 produits, aucun taux de réussite global et aucune courbe ne peut être qualifié de fiable si les lignes concernées n'ont pas passé leurs propres contrôles.
