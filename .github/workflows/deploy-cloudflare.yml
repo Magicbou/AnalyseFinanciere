@@ -62,6 +62,19 @@ jobs:
           }
           NODE
           curl --silent --fail https://analysefinanciere.boudas-pascal.workers.dev/ | grep -q "InvestPilot"
+          curl --silent --show-error --location --max-time 60 "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche" > /tmp/amundi-page.html
+          node <<'NODE'
+          const fs = require("fs");
+          const html = fs.readFileSync("/tmp/amundi-page.html", "utf8");
+          const isin = html.indexOf("LU1135865084");
+          console.log("Amundi page HTML probe:", JSON.stringify({
+            bytes: html.length,
+            isinFound: isin >= 0,
+            value852Found: html.includes("8,52"),
+            summaryMarker: html.indexOf("ETF_FINDER_SUMMARY"),
+            sample: isin >= 0 ? html.slice(Math.max(0, isin - 700), isin + 1200) : html.slice(0, 1000)
+          }));
+          NODE
           curl --silent --show-error --fail --max-time 120 https://analysefinanciere.boudas-pascal.workers.dev/api/catalog/amundi > /tmp/amundi-catalog.json
           node <<'NODE'
           const fs = require("fs");
