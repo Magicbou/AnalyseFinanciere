@@ -10,7 +10,7 @@ type AssuranceSortPeriod = "1" | "3" | "5" | "8";
 type AssurancePerformance = { annualizedPct:number|null; cumulativePct:number|null; years:number; fromYear:number; toYear:number; observations:number };
 type AnnualRate = { year:number; ratePct:number|null };
 type EuronextHistoryPoint = { date:string; close:number; open:number|null; high:number|null; low:number|null; volume:number|null };
-type EuronextHistory = { status:string; source?:string; sourceName?:string; retrievedAt?:string; from?:string; to?:string; points?:EuronextHistoryPoint[]; methodology?:string; message?:string };
+type EuronextHistory = { status:string; source?:string; sourceName?:string; retrievedAt?:string; from?:string; to?:string; points?:EuronextHistoryPoint[]; annualReturns?:{year:number;returnPct:number;fromDate:string;toDate:string;period:string}[]; methodology?:string; message?:string };
 type AssuranceContract = { slug:string; name:string; insurer:string|null; distributor:string|null; management:string|null; entryFeePct:number|null; ucManagementFeePct:number|null; euroManagementFeePct:number|null; arbitrationFeePct:number|null; supportCount:number|null; etfCount:number|null; scpiCount:number|null; minimumInitialEur:number|null; euroFund:string|null; euroRate2025Pct:number|null; euroRate2024Pct:number|null; euroRate2023Pct:number|null; annualRates?:AnnualRate[]; euroPerformance:Record<AssuranceSortPeriod,AssurancePerformance>; feeCheckedAt:string|null; rateCheckedAt:string|null; contractSourceUrl:string|null; rateSourceUrl:string|null; detailUrl:string|null };
 type AssuranceResponse = { status:string; sourceName?:string; retrievedAt?:string; sourceLicense?:string; sourceUrls?:{fees:string;euroRates:string}; methodology?:string; rateDefinition?:string; performanceEndYear?:number; contractCount?:number; contracts?:AssuranceContract[]; message?:string };
 const emptyFilters: Filters = { currency: "Toutes", venue: "Toutes", sfdr: "Toutes", exposure: "Toutes" };
@@ -59,6 +59,7 @@ function MarketHistoryChart({ title, history }: { title:string; history:Euronext
       <text x="34" y="225">{first.date}</text><text x="954" y="225" textAnchor="end">{last.date}</text>
       <text x="34" y="28">{max.toLocaleString("fr-FR",{maximumFractionDigits:3})}</text><text x="34" y="214">{min.toLocaleString("fr-FR",{maximumFractionDigits:3})}</text>
     </svg>
+    {history.annualReturns?.length?<div className="history-annual-performance"><strong>Performance par année, calculée sur les clôtures ajustées</strong><div>{history.annualReturns.map(item=><span key={item.year}><b>{item.period==="year_to_date"?item.year+" à date":item.year}</b><strong>{(item.returnPct>=0?"+":"")+item.returnPct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} %</strong><small>{item.fromDate} → {item.toDate}</small></span>)}</div></div>:null}
     <div className="history-chart-foot"><span>Source : <a href={history.source} target="_blank" rel="noreferrer">Euronext Live</a></span><span>Collecte : {history.retrievedAt?new Date(history.retrievedAt).toLocaleString("fr-FR"):"n.c."}</span></div>
     <p>{history.methodology ?? "Historique publié par Euronext. Cours ajustés ; la série n'est pas un flux temps réel."}</p>
   </section>;
@@ -71,17 +72,19 @@ function AnnualRateChart({ title, rates, sourceUrl, checkedAt }: { title:string;
   const min = Math.min(0,...values), max = Math.max(0,...values);
   const range = max-min || 1;
   const baseline = 22 + (max/range)*112;
-  const slot = 900/available.length;
+  const slot = 900/Math.max(rates.length,1);
   return <section className="history-chart-panel annual-history-panel">
     <div className="history-chart-heading"><div><strong>{title}</strong><small>Rendements annuels publiés du fonds euros · valeurs non interpolées</small></div><div className="history-chart-current"><strong>{available.length} années</strong><small>{available[0].year}–{available[available.length-1].year}</small></div></div>
     <svg className="annual-bar-chart" viewBox="0 0 980 190" role="img" aria-label={"Rendements annuels du fonds euros "+title}>
       <line x1="34" y1={baseline} x2="954" y2={baseline}/>
-      {available.map((item,index)=>{
-        const value=item.ratePct as number;
-        const height=Math.abs(value)/range*112;
+      {rates.map((item,index)=>{
         const x=38+index*slot+slot*.15;
+        const width=Math.max(8,slot*.68);
+        if(item.ratePct===null) return <g key={item.year}><text x={x+width/2} y={baseline-7} textAnchor="middle">n.c.</text><text x={x+width/2} y="184" textAnchor="middle">{item.year}</text></g>;
+        const value=item.ratePct;
+        const height=Math.abs(value)/range*112;
         const y=value>=0?baseline-height:baseline;
-        return <g key={item.year}><rect x={x} y={y} width={Math.max(8,slot*.68)} height={Math.max(1,height)} rx="3"/><text x={x+Math.max(8,slot*.68)/2} y={value>=0?Math.max(12,y-5):Math.min(174,y+height+14)} textAnchor="middle">{value.toLocaleString("fr-FR",{maximumFractionDigits:2})} %</text><text x={x+Math.max(8,slot*.68)/2} y="184" textAnchor="middle">{item.year}</text></g>;
+        return <g key={item.year}><rect x={x} y={y} width={width} height={Math.max(1,height)} rx="3"/><text x={x+width/2} y={value>=0?Math.max(12,y-5):Math.min(174,y+height+14)} textAnchor="middle">{value.toLocaleString("fr-FR",{maximumFractionDigits:2})} %</text><text x={x+width/2} y="184" textAnchor="middle">{item.year}</text></g>;
       })}
     </svg>
     <div className="history-chart-foot"><span>Source : {sourceUrl?<a href={sourceUrl} target="_blank" rel="noreferrer">jeu de données public</a>:"non renseignée"}</span><span>Relevé source : {checkedAt??"n.c."}</span></div>
