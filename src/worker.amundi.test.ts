@@ -32,7 +32,7 @@ function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
 }
 
 function apiResponse() {
-  const products = Array.from({ length: 655 }, (_, index) => apiProduct(index));
+  const products: any[] = Array.from({ length: 655 }, (_, index) => apiProduct(index));
   products[654].characteristics.VISIBILITY_EXCEPTIONS = [
     { countryCode: "FRA", userProfileName: "INSTIT" }
   ];
