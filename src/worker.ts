@@ -651,7 +651,14 @@ async function getAssuranceVieContracts(env: Env): Promise<Response> {
       feesResponse.text().then(parseCsvDocument),
       euroResponse.text().then(parseCsvDocument)
     ]);
-    const historyStored = await persistAssuranceEuroRates(env, euroRows);
+    let historyStored = 0;
+    let historyStatus = "ok";
+    try {
+      historyStored = await persistAssuranceEuroRates(env, euroRows);
+    } catch {
+      // A D1 migration or transient database issue must not hide valid public contract data.
+      historyStatus = "database_unavailable";
+    }
     const feeBySlug = new Map(feeRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
     const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
     const assuranceSlugs = [...new Set([...feeBySlug.keys(), ...euroBySlug.keys()])];
@@ -724,7 +731,7 @@ async function getAssuranceVieContracts(env: Env): Promise<Response> {
       performanceEndYear,
       rateDefinition: "Taux du fonds euros nets des frais de gestion du contrat et bruts des prélèvements sociaux ; bonus conditionnels non inclus.",
       contractCount: contracts.length,
-      history: { layer: 'euro_fund', storedRows: historyStored, endpoint: '/api/assurance-vie/history?slug={contract_slug}' },
+      history: { layer: 'euro_fund', status: historyStatus, storedRows: historyStored, endpoint: '/api/assurance-vie/history?slug={contract_slug}' },
       contracts
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
   } catch (error) {
