@@ -631,7 +631,7 @@ async function getAssuranceVieHistory(request: Request, env: Env): Promise<Respo
   if (!slug || slug.length > 200) return json({ status: "invalid_request", message: "Fournir le slug du contrat." }, 400);
   try {
     const result = await env.HISTORY_DB.prepare("SELECT contract_slug AS slug, fund_name AS fundName, rate_year AS year, rate_pct AS ratePct, source_url AS sourceUrl, source_checked_at AS sourceCheckedAt, collected_date AS collectedDate, collected_at AS collectedAt FROM assurance_euro_rates WHERE contract_slug = ? ORDER BY rate_year, collected_at").bind(slug).all();
-    return json({ status: "ok", layer: "euro_fund", slug, count: result.results.length, observations: result.results, methodology: "Taux annuels publiés par année source. La date de collecte InvestPilot est distincte de l’année de rendement ; aucune observation quotidienne n’est créée." }, 200, { "Cache-Control": "public, max-age=300, s-maxage=600" });
+    return json({ status: "ok", layer: "euro_fund", slug, count: result.results.length, observations: result.results, methodology: "Taux annuels publiés par année source, archivés sous forme de snapshots datés lors des collectes quotidiennes. La date de collecte InvestPilot est distincte de l’année de rendement ; ces snapshots ne constituent pas des rendements quotidiens." }, 200, { "Cache-Control": "public, max-age=300, s-maxage=600" });
   } catch (error) {
     return json({ status: "database_unavailable", message: error instanceof Error ? error.message : "Lecture D1 impossible." }, 503);
   }
