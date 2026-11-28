@@ -79,8 +79,17 @@ jobs:
           const sample = d.products?.find(p => p.isin === "LU1135865084");
           const periods = ["performance1y", "performance3y", "performance5y", "performance10y"];
           const missing = periods.filter(k => typeof sample?.[k] !== "string" || !Number.isFinite(Number(sample[k])));
-          if (!sample || missing.length) {
-            console.error("Performances Amundi absentes pour LU1135865084:", missing);
+          const coverage = d.audit?.performanceCoverage;
+          if (!sample || missing.length || !coverage || periods.some((_, index) => {
+            const key = ["oneYear", "threeYears", "fiveYears", "tenYears"][index];
+            return !(coverage[key] > 0);
+          })) {
+            console.error("Performances Amundi absentes ou couverture nulle:", { missing, coverage });
+            process.exit(1);
+          }
+          if (Number(sample.performance1y) < 1 || Number(sample.performance1y) > 40
+            || Number(sample.performance10y) < 50 || Number(sample.performance10y) > 1500) {
+            console.error("Performances Amundi hors échelle attendue en pourcentage:", sample);
             process.exit(1);
           }
           if (!String(d.source || "").includes("/particuliers/")) {
