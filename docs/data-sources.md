@@ -105,3 +105,15 @@ L'audit doit couvrir 100 % des ISIN du catalogue et 100 % des lignes de cotation
 - La fiche officielle Amundi et l'historique de VL doivent être privilégiés pour contrôler la part. Les cours boursiers restent une série séparée.
 
 Cette règle est bloquante : aucune couverture de 654 produits, aucun taux de réussite global et aucune courbe ne peut être qualifié de fiable si les lignes concernées n'ont pas passé leurs propres contrôles.
+
+
+## Affichage obligatoire du statut de certification
+
+Le libellé de statut de chaque donnée (et non un badge global qui masquerait les différences entre champs) utilise exactement trois niveaux :
+- **Vert — Certifié** : contrôles d'identité, source primaire, rapprochement indépendant quand disponible, devise, dates, fraîcheur et méthode tous satisfaits. Le libellé affiché est « Certifié ».
+- **Orange — Partiellement vérifié** : une partie des contrôles est satisfaite, mais au moins un contrôle important reste manquant ou non concluant. Le libellé affiché est « Partiellement vérifié », avec le contrôle manquant explicité.
+- **Rouge — Non vérifié** : aucune vérification suffisante, identité/provenance non démontrée, source invalide ou donnée indisponible. Le libellé affiché est « Non vérifié » ou « Indisponible » selon le cas. Une série rouge ne doit pas alimenter un graphique ni un calcul de performance.
+
+Le statut est attribué **par donnée et par période/série**, jamais par fournisseur entier, par fonds entier ou par simple présence dans le catalogue. Une donnée officielle Amundi peut être certifiée pour la VL publiée à une date donnée, sans certifier automatiquement le cours coté ni l'historique tiers du même ETF. Une donnée manuelle est non vérifiée tant que ses justificatifs n'ont pas été contrôlés.
+
+Les couleurs ne remplacent jamais le texte : toujours afficher le libellé explicite, accessible et compréhensible sans couleur. Les mêmes règles doivent s'appliquer dans le catalogue, les graphiques, les fiches détaillées, les comparaisons et les exports.
