@@ -38,7 +38,7 @@ function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
 function apiResponse() {
   const products: any[] = Array.from({ length: 655 }, (_, index) => apiProduct(index));
   products[654].characteristics.VISIBILITY_EXCEPTIONS = [
-    { countryCode: "FRA", userProfileName: "RETAIL" }
+    { countryCode: "FRA", userProfileName: "INSTIT" }
   ];
   products.push({
     ...apiProduct(655),
@@ -68,7 +68,7 @@ describe("Amundi catalogue Worker integration", () => {
     const body = await response.json() as {
       status: string; completeness: string; sourceTotal: number; productCount: number;
       pageCount: number; products: Array<{ isin: string; ticker: string; name: string; nav: string | null; performance1y: string | null; performance3y: string | null; performance5y: string | null; performance10y: string | null; srri: string | null }>;
-      audit: { apiProductRecords: number; activeProductRecords: number; excludedByFranceRetailVisibility: number };
+      audit: { apiProductRecords: number; activeProductRecords: number; excludedByFranceInstitutionalVisibility: number };
     };
 
     expect(response.status).toBe(200);
@@ -81,7 +81,7 @@ describe("Amundi catalogue Worker integration", () => {
     expect(body.pageCount).toBe(1);
     expect(body.audit).toMatchObject({
       apiProductRecords: 656, activeProductRecords: 655,
-      excludedByFranceRetailVisibility: 1
+      excludedByFranceInstitutionalVisibility: 1
     });
     expect(body.products[0]).toMatchObject({
       isin: "LU0000000001", ticker: "ETF1 FP", name: "Amundi Test ETF 1",
@@ -94,7 +94,7 @@ describe("Amundi catalogue Worker integration", () => {
       productType: "ALL",
       context: {
         countryName: "France", countryCode: "FRA",
-        languageName: "French", languageCode: "fr", userProfileName: "RETAIL"
+        languageName: "French", languageCode: "fr", userProfileName: "INSTIT"
       },
       filters: [], sortCriterias: []
     });
