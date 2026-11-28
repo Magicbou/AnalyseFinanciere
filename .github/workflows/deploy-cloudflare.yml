@@ -85,10 +85,14 @@ jobs:
               const response = await fetch(url);
               if (!response.ok) return null;
               const body = await response.text();
-              const terms = ["getProductsData", "ProductAPI", "ETF_FINDER_SUMMARY", "PERFORMANCE"];
+              const terms = ["getProductsData", "ProductAPI", "ETF_FINDER_SUMMARY", "PERFORMANCE", "ONE_YEAR", "TEN_YEARS", "historics", "metrics:"];
               const hits = terms.filter(term => body.includes(term));
               if (!hits.length) return null;
-              return { url, bytes: body.length, hits, sample: body.slice(Math.max(0, body.indexOf(hits[0]) - 250), body.indexOf(hits[0]) + 700) };
+              const snippets = terms.filter(term => body.includes(term)).map(term => {
+                const index = body.indexOf(term);
+                return { term, sample: body.slice(Math.max(0, index - 500), index + 1100) };
+              });
+              return { url, bytes: body.length, hits, snippets };
             } catch { return null; }
           })).then(results => console.log("Amundi API scripts:", JSON.stringify(results.filter(Boolean))));
           NODE
