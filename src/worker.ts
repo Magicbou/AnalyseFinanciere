@@ -334,7 +334,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       ? uniqueProducts.filter(product => [
           product.name, product.isin, product.ticker, product.wkn, product.exposure,
           product.currency, product.sfdr
-        ].some(value => value.toLocaleLowerCase("fr-FR").includes(search)))
+        ].some(value => (value ?? "").toLocaleLowerCase("fr-FR").includes(search)))
       : uniqueProducts;
 
     return json({
