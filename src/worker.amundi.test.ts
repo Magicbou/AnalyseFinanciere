@@ -94,7 +94,7 @@ describe("Amundi catalogue Worker integration", () => {
       productType: "ALL",
       context: {
         countryName: "France", countryCode: "FRA",
-        languageName: "French", languageCode: "fr", userProfileName: "INSTIT"
+        languageName: "French", languageCode: "fr", userProfileName: "RETAIL"
       },
       filters: [], sortCriterias: []
     });
