@@ -54,3 +54,16 @@ Le fournisseur annonce une couverture européenne via Cboe pour les données dif
 ### Décision
 
 Aucun fournisseur n'est retenu à ce stade. Le choix exige un test de couverture sur un échantillon représentatif d'ETF Amundi (ISIN, ticker, MIC), la vérification des horodatages et du type de prix, puis une confirmation écrite des droits d'affichage correspondant à l'usage réel d'InvestPilot. Aucun abonnement ne sera activé sans accord explicite.
+
+
+## Historiques ETF et graphiques
+
+Pour les cotations rattachées aux marchés Euronext Paris, Amsterdam, Bruxelles et Milan, InvestPilot interroge le service public de cours historiques de Euronext Live par couple ISIN + MIC. Le graphique restitue les clôtures quotidiennes ajustées réellement retournées par la source. La fenêtre intégrée est limitée aux deux dernières années ; la série n'est pas assimilée à un flux temps réel et peut être indisponible pour une cotation ou une place non couverte.
+
+Source d'accès et exemple de formulaire historique :
+- https://live.euronext.com/fr/popout-page/getHistoricalPrice/LU1681043599-XPAR
+- Requête publique observée dans l'implémentation communautaire du paquet R Euronext : https://github.com/cran/Euronext/blob/master/R/EN_HistData.R
+
+Les graphiques assurance-vie utilisent les taux annuels publiés du fonds euros dans le jeu de données ouvert « taux des fonds euros des contrats d'assurance vie et PER ». Ils ne décrivent ni les unités de compte, ni les performances du contrat complet. Les années sans taux publié restent absentes et ne sont ni interpolées ni estimées.
+
+La collecte Euronext différée toutes les 15 minutes n'est pas un historique intraday : la publication réglementaire a jusqu'à 15 minutes de délai et les fichiers de transactions récents ne constituent pas une base historique durable. Aucun relevé intraday n'est reconstitué artificiellement.
