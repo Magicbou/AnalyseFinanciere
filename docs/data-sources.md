@@ -58,12 +58,10 @@ Aucun fournisseur n'est retenu à ce stade. Le choix exige un test de couverture
 
 ## Historiques ETF et graphiques
 
-Pour les cotations rattachées aux marchés Euronext Paris, Amsterdam, Bruxelles et Milan, InvestPilot interroge le service public de cours historiques de Euronext Live par couple ISIN + MIC. Le graphique restitue les clôtures quotidiennes ajustées réellement retournées par la source. Dans cette première version, InvestPilot limite la fenêtre interrogée aux deux dernières années ; la série n'est pas assimilée à un flux temps réel et peut être indisponible pour une cotation ou une place non couverte.
+Les graphiques ETF utilisent le point d'accès public de graphiques historiques de Yahoo Finance, sans clé API ni abonnement, à partir du ticker de cotation Amundi et de sa place (ex. CW8 FP → CW8.PA). La série quotidienne peut remonter jusqu'à dix ans selon l'ancienneté et la couverture de chaque ligne. Lorsque Yahoo fournit une série de clôtures ajustées, InvestPilot l'utilise pour calculer les rendements annuels ; sinon le graphique signale que les clôtures sont non ajustées. Les performances par année sont calculées sur les dernières clôtures observées de deux années successives ; l'année en cours est indiquée « à date ».
 
-Source d'accès et exemple de formulaire historique :
-- https://live.euronext.com/fr/popout-page/getHistoricalPrice/LU1681043599-XPAR
-- Requête publique observée dans l'implémentation communautaire du paquet R Euronext : https://github.com/cran/Euronext/blob/master/R/EN_HistData.R
+Limite importante : l'endpoint de graphique Yahoo Finance est public mais non documenté comme une API contractuelle. Sa disponibilité, sa couverture et ses règles d'accès peuvent évoluer. Les valeurs sont attribuées à Yahoo Finance, jamais présentées comme des données Euronext officielles. La cotation récente Euronext reste une source distincte et différée.
 
-Les graphiques assurance-vie utilisent les taux annuels publiés du fonds euros dans le jeu de données ouvert « taux des fonds euros des contrats d'assurance vie et PER ». Ils ne décrivent ni les unités de compte, ni les performances du contrat complet. Les années sans taux publié restent absentes et ne sont ni interpolées ni estimées.
+Les graphiques assurance-vie utilisent les taux annuels publiés du fonds euros dans le jeu de données ouvert « taux des fonds euros des contrats d'assurance vie et PER ». Ils ne décrivent ni les unités de compte, ni les performances du contrat complet. Les années sans taux publié restent visibles comme « n.c. » et ne sont ni interpolées ni estimées.
 
 La collecte Euronext différée toutes les 15 minutes n'est pas un historique intraday : la publication réglementaire a jusqu'à 15 minutes de délai et les fichiers de transactions récents ne constituent pas une base historique durable. Aucun relevé intraday n'est reconstitué artificiellement.
