@@ -25,11 +25,11 @@ function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
       ...overrides
     },
     metrics: [
-      { indicator: "PERFORMANCE", period: "YEAR_TO_DATE", value: "7,5 %" },
-      { indicator: "PERFORMANCE", period: "ONE_YEAR", value: "12,3 %" },
-      { indicator: "PERFORMANCE", period: "THREE_YEARS", value: "8,4 %" },
-      { indicator: "PERFORMANCE", period: "FIVE_YEARS", value: "6,7 %" },
-      { indicator: "PERFORMANCE", period: "TEN_YEARS", value: "9,1 %" }
+      { indicator: "shareCumulativePerformance", period: "YEAR_TO_DATE", value: "7,5 %" },
+      { indicator: "shareCumulativePerformance", period: "ONE_YEAR", value: "12,3 %" },
+      { indicator: "shareCumulativePerformance", period: "THREE_YEARS", value: "8,4 %" },
+      { indicator: "shareCumulativePerformance", period: "FIVE_YEARS", value: "6,7 %" },
+      { indicator: "shareCumulativePerformance", period: "TEN_YEARS", value: "9,1 %" }
     ],
     currencies: { CURRENCY: "EUR" }
   };
@@ -101,9 +101,9 @@ describe("Amundi catalogue Worker integration", () => {
     expect(postedBody.characteristics).toContain("ISIN");
     expect(postedBody.characteristics).toContain("MAIN_LISTINGS");
     expect(postedBody.characteristics).toContain("SRRI");
-    expect(postedBody.metrics).toContainEqual({ indicator: "PERFORMANCE", period: "YEAR_TO_DATE" });
+    expect(postedBody.metrics).toContainEqual({ indicator: "shareCumulativePerformance", period: "YEAR_TO_DATE" });
     for (const period of ["ONE_YEAR", "THREE_YEARS", "FIVE_YEARS", "TEN_YEARS"]) {
-      expect(postedBody.metrics).toContainEqual({ indicator: "PERFORMANCE", period });
+      expect(postedBody.metrics).toContainEqual({ indicator: "shareCumulativePerformance", period });
     }
   });
 
