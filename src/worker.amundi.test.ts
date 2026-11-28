@@ -25,11 +25,11 @@ function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
       ...overrides
     },
     metrics: [
-      { indicator: "PERFORMANCE", period: "YEAR_TO_DATE", value: 7.5 },
-      { indicator: "PERFORMANCE", period: "ONE_YEAR", value: 12.3 },
-      { indicator: "PERFORMANCE", period: "THREE_YEARS", value: 8.4 },
-      { indicator: "PERFORMANCE", period: "FIVE_YEARS", value: 6.7 },
-      { indicator: "PERFORMANCE", period: "TEN_YEARS", value: 9.1 }
+      { indicator: "PERFORMANCE", period: "YEAR_TO_DATE", value: "7,5 %" },
+      { indicator: "PERFORMANCE", period: "ONE_YEAR", value: "12,3 %" },
+      { indicator: "PERFORMANCE", period: "THREE_YEARS", value: "8,4 %" },
+      { indicator: "PERFORMANCE", period: "FIVE_YEARS", value: "6,7 %" },
+      { indicator: "PERFORMANCE", period: "TEN_YEARS", value: "9,1 %" }
     ],
     currencies: { CURRENCY: "EUR" }
   };
@@ -38,7 +38,7 @@ function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
 function apiResponse() {
   const products: any[] = Array.from({ length: 655 }, (_, index) => apiProduct(index));
   products[654].characteristics.VISIBILITY_EXCEPTIONS = [
-    { countryCode: "FRA", userProfileName: "INSTIT" }
+    { countryCode: "FRA", userProfileName: "RETAIL" }
   ];
   products.push({
     ...apiProduct(655),
@@ -68,7 +68,7 @@ describe("Amundi catalogue Worker integration", () => {
     const body = await response.json() as {
       status: string; completeness: string; sourceTotal: number; productCount: number;
       pageCount: number; products: Array<{ isin: string; ticker: string; name: string; nav: string | null; performance1y: string | null; performance3y: string | null; performance5y: string | null; performance10y: string | null; srri: string | null }>;
-      audit: { apiProductRecords: number; activeProductRecords: number; excludedByFranceInstitutionalVisibility: number };
+      audit: { apiProductRecords: number; activeProductRecords: number; excludedByFranceRetailVisibility: number };
     };
 
     expect(response.status).toBe(200);
@@ -81,7 +81,7 @@ describe("Amundi catalogue Worker integration", () => {
     expect(body.pageCount).toBe(1);
     expect(body.audit).toMatchObject({
       apiProductRecords: 656, activeProductRecords: 655,
-      excludedByFranceInstitutionalVisibility: 1
+      excludedByFranceRetailVisibility: 1
     });
     expect(body.products[0]).toMatchObject({
       isin: "LU0000000001", ticker: "ETF1 FP", name: "Amundi Test ETF 1",
