@@ -153,7 +153,8 @@ function App() {
   const [historyByIsin, setHistoryByIsin] = useState<Record<string,EuronextHistory>>({});
   const [historyLoadingIsin, setHistoryLoadingIsin] = useState<string|null>(null);
   const [historyOpenIsin, setHistoryOpenIsin] = useState<string|null>(null);
-  const [assuranceHistorySlug, setAssuranceHistorySlug] = useState<string|null>(null);\n  const [assuranceHistoryBySlug,setAssuranceHistoryBySlug]=useState<Record<string,AssuranceHistoryResponse>>({});\n  const [assuranceHistoryLoadingSlug,setAssuranceHistoryLoadingSlug]=useState<string|null>(null);
+  const [assuranceHistorySlug, setAssuranceHistorySlug] = useState<string|null>(null);
+  const [assuranceHistoryBySlug,setAssuranceHistoryBySlug]=useState<Record<string,AssuranceHistoryResponse>>({});\n  const [assuranceHistoryLoadingSlug,setAssuranceHistoryLoadingSlug]=useState<string|null>(null);
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void refreshAll(); }, []);
   useEffect(() => { localStorage.setItem("investpilot.manualEtfs", JSON.stringify(manualProducts)); }, [manualProducts]);
