@@ -49,8 +49,9 @@ export function extractAmundiTotal(html: string): number | null {
     .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")
     .trim();
-  const match = text.match(/([\d\s]+)\s*produit\s*(?:\(s\)|s)?\s*trouv(?:é|e)\s*(?:\(s\)|s)?/i);
-  return match ? Number(match[1].replace(/\s/g, "")) : null;
+  const matches = [...text.matchAll(/([\d\s]+)\s*produit\s*(?:\(s\)|s)?\s*trouv(?:é|e)\s*(?:\(s\)|s)?/gi)];
+  const totals = matches.map(match => Number(match[1].replace(/\s/g, ""))).filter(Number.isSafeInteger);
+  return totals.length ? Math.max(...totals) : null;
 }
 export function discoverAmundiPaginationLinks(html: string, sourceUrl: string): string[] {
   const base = new URL(sourceUrl);
