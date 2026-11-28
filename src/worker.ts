@@ -1,5 +1,8 @@
+interface D1PreparedStatement { bind(...values: unknown[]): D1PreparedStatement; all<T = Record<string, unknown>>(): Promise<{ results: T[] }>; }
+interface D1Database { prepare(query: string): D1PreparedStatement; batch<T = unknown>(statements: D1PreparedStatement[]): Promise<T[]>; }
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
+  HISTORY_DB: D1Database;
 }
 
 const AMUNDI_SOURCE = "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche";
@@ -603,7 +606,38 @@ function assuranceVieType(value: string): boolean {
   return normalized === "av" || normalized.includes("assurancevie");
 }
 
-async function getAssuranceVieContracts(): Promise<Response> {
+const INSURANCE_EURO_SOURCE_URL = "https://www.data.gouv.fr/api/1/datasets/r/d6c8853b-b38e-4aa3-a119-4cb7935429a6";
+
+async function persistAssuranceEuroRates(env: Env, rows: Record<string, string>[]): Promise<number> {
+  const collectedAt = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  for (const row of rows) {
+    if (!row.slug || !assuranceVieType(row.type ?? "")) continue;
+    for (const [key, raw] of Object.entries(row)) {
+      const match = /^taux_(\d{4})_pct$/.exec(key);
+      if (!match) continue;
+      const rate = nullableNumber(raw);
+      if (rate === null || rate <= -100 || rate >= 1000) continue;
+      const sql = "INSERT INTO assurance_euro_rates (contract_slug, fund_name, rate_year, rate_pct, source_url, source_checked_at, collected_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(contract_slug, rate_year, source_url) DO UPDATE SET fund_name=excluded.fund_name, rate_pct=excluded.rate_pct, source_checked_at=excluded.source_checked_at, collected_at=excluded.collected_at";
+      statements.push(env.HISTORY_DB.prepare(sql).bind(row.slug, row.fonds_euros || null, Number(match[1]), rate, row.url_source_principale || INSURANCE_EURO_SOURCE_URL, row.date_releve || null, collectedAt));
+    }
+  }
+  for (let offset = 0; offset < statements.length; offset += 80) await env.HISTORY_DB.batch(statements.slice(offset, offset + 80));
+  return statements.length;
+}
+
+async function getAssuranceVieHistory(request: Request, env: Env): Promise<Response> {
+  const slug = (new URL(request.url).searchParams.get("slug") ?? "").trim();
+  if (!slug || slug.length > 200) return json({ status: "invalid_request", message: "Fournir le slug du contrat." }, 400);
+  try {
+    const result = await env.HISTORY_DB.prepare("SELECT contract_slug AS slug, fund_name AS fundName, rate_year AS year, rate_pct AS ratePct, source_url AS sourceUrl, source_checked_at AS sourceCheckedAt, collected_at AS collectedAt FROM assurance_euro_rates WHERE contract_slug = ? ORDER BY rate_year").bind(slug).all();
+    return json({ status: "ok", layer: "euro_fund", slug, count: result.results.length, observations: result.results, methodology: "Taux annuels publiés par année source. La date de collecte InvestPilot est distincte de l’année de rendement ; aucune observation quotidienne n’est créée." }, 200, { "Cache-Control": "public, max-age=300, s-maxage=600" });
+  } catch (error) {
+    return json({ status: "database_unavailable", message: error instanceof Error ? error.message : "Lecture D1 impossible." }, 503);
+  }
+}
+
+async function getAssuranceVieContracts(env: Env): Promise<Response> {
   const retrievedAt = new Date().toISOString();
   try {
     const [feesResponse, euroResponse] = await Promise.all([
@@ -617,6 +651,7 @@ async function getAssuranceVieContracts(): Promise<Response> {
       feesResponse.text().then(parseCsvDocument),
       euroResponse.text().then(parseCsvDocument)
     ]);
+    const historyStored = await persistAssuranceEuroRates(env, euroRows);
     const feeBySlug = new Map(feeRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
     const euroBySlug = new Map(euroRows.filter(row => row.slug && assuranceVieType(row.type ?? "")).map(row => [row.slug, row] as const));
     const assuranceSlugs = [...new Set([...feeBySlug.keys(), ...euroBySlug.keys()])];
@@ -689,6 +724,7 @@ async function getAssuranceVieContracts(): Promise<Response> {
       performanceEndYear,
       rateDefinition: "Taux du fonds euros nets des frais de gestion du contrat et bruts des prélèvements sociaux ; bonus conditionnels non inclus.",
       contractCount: contracts.length,
+      history: { layer: 'euro_fund', storedRows: historyStored, endpoint: '/api/assurance-vie/history?slug={contract_slug}' },
       contracts
     }, 200, { "Cache-Control": "public, max-age=300, s-maxage=900" });
   } catch (error) {
@@ -702,6 +738,14 @@ async function getAssuranceVieContracts(): Promise<Response> {
 
 
 export default {
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil((async () => {
+      const response = await fetch(INSURANCE_EURO_CSV, { headers: { Accept: "text/csv,*/*" } });
+      if (!response.ok) throw new Error("Source fonds euros indisponible: HTTP " + response.status);
+      const rows = parseCsvDocument(await response.text());
+      await persistAssuranceEuroRates(env, rows);
+    })());
+  },
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
@@ -711,7 +755,8 @@ export default {
       }
       if (url.pathname === "/api/catalog/amundi") return getAmundiCatalog(request);
       if (url.pathname === "/api/market/fx") return getEcbFx();
-      if (url.pathname === "/api/assurance-vie/contracts") return getAssuranceVieContracts();
+      if (url.pathname === "/api/assurance-vie/contracts") return getAssuranceVieContracts(env);
+      if (url.pathname === "/api/assurance-vie/history") return getAssuranceVieHistory(request, env);
       if (url.pathname === "/api/market/euronext") return getEuronextTrades(request);
       if (url.pathname === "/api/market/history") return getEtfHistory(request);
       return json({ status: "not_found", path: url.pathname }, 404);
