@@ -2,7 +2,7 @@ interface D1PreparedStatement { bind(...values: unknown[]): D1PreparedStatement;
 interface D1Database { prepare(query: string): D1PreparedStatement; batch<T = unknown>(statements: D1PreparedStatement[]): Promise<T[]>; }
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
-  HISTORY_DB: D1Database;
+  HISTORY_DB?: D1Database;
 }
 
 const AMUNDI_SOURCE = "https://www.amundietf.fr/fr/particuliers/produits-etf/recherche";
@@ -609,6 +609,8 @@ function assuranceVieType(value: string): boolean {
 const INSURANCE_EURO_SOURCE_URL = "https://www.data.gouv.fr/api/1/datasets/r/d6c8853b-b38e-4aa3-a119-4cb7935429a6";
 
 async function persistAssuranceEuroRates(env: Env, rows: Record<string, string>[]): Promise<number> {
+  if (!env.HISTORY_DB) throw new Error("Binding D1 HISTORY_DB absent");
+  const database = env.HISTORY_DB;
   const collectedAt = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
   for (const row of rows) {
@@ -619,10 +621,10 @@ async function persistAssuranceEuroRates(env: Env, rows: Record<string, string>[
       const rate = nullableNumber(raw);
       if (rate === null || rate <= -100 || rate >= 1000) continue;
       const sql = "INSERT INTO assurance_euro_rates (contract_slug, fund_name, rate_year, rate_pct, source_url, source_checked_at, collected_date, collected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(contract_slug, rate_year, source_url, collected_date) DO NOTHING";
-      statements.push(env.HISTORY_DB.prepare(sql).bind(row.slug, row.fonds_euros || null, Number(match[1]), rate, row.url_source_principale || INSURANCE_EURO_SOURCE_URL, row.date_releve || null, collectedAt.slice(0, 10), collectedAt));
+      statements.push(database.prepare(sql).bind(row.slug, row.fonds_euros || null, Number(match[1]), rate, row.url_source_principale || INSURANCE_EURO_SOURCE_URL, row.date_releve || null, collectedAt.slice(0, 10), collectedAt));
     }
   }
-  for (let offset = 0; offset < statements.length; offset += 80) await env.HISTORY_DB.batch(statements.slice(offset, offset + 80));
+  for (let offset = 0; offset < statements.length; offset += 80) await database.batch(statements.slice(offset, offset + 80));
   return statements.length;
 }
 
@@ -630,6 +632,7 @@ async function getAssuranceVieHistory(request: Request, env: Env): Promise<Respo
   const slug = (new URL(request.url).searchParams.get("slug") ?? "").trim();
   if (!slug || slug.length > 200) return json({ status: "invalid_request", message: "Fournir le slug du contrat." }, 400);
   try {
+    if (!env.HISTORY_DB) throw new Error("Binding D1 HISTORY_DB absent");
     const result = await env.HISTORY_DB.prepare("SELECT contract_slug AS slug, fund_name AS fundName, rate_year AS year, rate_pct AS ratePct, source_url AS sourceUrl, source_checked_at AS sourceCheckedAt, collected_date AS collectedDate, collected_at AS collectedAt FROM assurance_euro_rates WHERE contract_slug = ? ORDER BY rate_year, collected_at").bind(slug).all();
     return json({ status: "ok", layer: "euro_fund", slug, count: result.results.length, observations: result.results, methodology: "Taux annuels publiés par année source, archivés sous forme de snapshots datés lors des collectes quotidiennes. La date de collecte InvestPilot est distincte de l’année de rendement ; ces snapshots ne constituent pas des rendements quotidiens." }, 200, { "Cache-Control": "public, max-age=300, s-maxage=600" });
   } catch (error) {
