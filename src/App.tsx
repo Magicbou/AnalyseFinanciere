@@ -9,6 +9,8 @@ type EuronextResponse = { status:string; source?:string; sourceName?:string; ret
 type AssuranceSortPeriod = "1" | "3" | "5" | "8";
 type AssurancePerformance = { annualizedPct:number|null; cumulativePct:number|null; years:number; fromYear:number; toYear:number; observations:number };
 type AnnualRate = { year:number; ratePct:number|null };
+type AssuranceHistoryObservation = { slug:string; fundName:string|null; year:number; ratePct:number; sourceUrl:string; sourceCheckedAt:string|null; collectedDate:string; collectedAt:string };
+type AssuranceHistoryResponse = { status:string; slug?:string; count?:number; observations?:AssuranceHistoryObservation[]; methodology?:string; message?:string };
 type EuronextHistoryPoint = { date:string; close:number; rawClose:number|null; open:number|null; high:number|null; low:number|null; volume:number|null };
 type EuronextHistory = { status:string; source?:string; sourceName?:string; retrievedAt?:string; from?:string; to?:string; currency?:string|null; exchangeName?:string|null; adjusted?:boolean; points?:EuronextHistoryPoint[]; annualReturns?:{year:number;returnPct:number;fromDate:string;toDate:string;period:string}[]; methodology?:string; message?:string };
 type AssuranceContract = { slug:string; name:string; insurer:string|null; distributor:string|null; management:string|null; entryFeePct:number|null; ucManagementFeePct:number|null; euroManagementFeePct:number|null; arbitrationFeePct:number|null; supportCount:number|null; etfCount:number|null; scpiCount:number|null; minimumInitialEur:number|null; euroFund:string|null; euroRate2025Pct:number|null; euroRate2024Pct:number|null; euroRate2023Pct:number|null; annualRates?:AnnualRate[]; euroPerformance:Record<AssuranceSortPeriod,AssurancePerformance>; feeCheckedAt:string|null; rateCheckedAt:string|null; contractSourceUrl:string|null; rateSourceUrl:string|null; detailUrl:string|null };
@@ -86,6 +88,37 @@ function AnnualRateChart({ title, rates, sourceUrl, checkedAt }: { title:string;
   </section>;
 }
 
+function AssuranceSnapshotChart({ title, history }: { title:string; history:AssuranceHistoryResponse }) {
+  const [windowDays, setWindowDays] = useState<7|30|365>(30);
+  const years = [...new Set((history.observations??[]).map(item=>item.year))].sort((a,b)=>a-b);
+  const [selectedYear,setSelectedYear] = useState<number|null>(null);
+  const year = selectedYear!==null && years.includes(selectedYear) ? selectedYear : (years[years.length-1]??null);
+  const cutoff = Date.now()-windowDays*86400000;
+  const points = (history.observations??[])
+    .filter(item=>item.year===year && Date.parse(item.collectedAt)>=cutoff)
+    .sort((a,b)=>a.collectedAt.localeCompare(b.collectedAt));
+  if (!history.observations?.length) return <div className="history-empty">{history.message??"Aucune collecte historique enregistrée pour ce contrat. La première apparaîtra après activation de la base D1."}</div>;
+  const values=points.map(item=>item.ratePct);
+  const min=Math.min(...values), max=Math.max(...values), range=max-min||Math.max(Math.abs(max)*0.01,0.01);
+  const coords=points.map((item,index)=>({x:34+(points.length===1?460:index/(points.length-1)*920),y:184-((item.ratePct-min)/range)*142}));
+  const path=coords.map((p,index)=>(index===0?"M":"L")+p.x.toFixed(1)+" "+p.y.toFixed(1)).join(" ");
+  const last=points[points.length-1];
+  return <section className="history-chart-panel">
+    <div className="history-chart-heading"><div><strong>{title} · archives InvestPilot</strong><small>{points.length} collecte(s) sur {windowDays===7?"7 jours":windowDays===30?"30 jours":"365 jours"} · taux source de {year??"—"}</small></div><div className="history-chart-current"><strong>{last?last.ratePct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" %":"—"}</strong><small>{last?"Dernière valeur archivée":"Aucune observation sur cette période"}</small></div></div>
+    <div className="insurance-period-switch" aria-label="Période de l'historique">{([7,30,365] as const).map(days=><button key={days} className={windowDays===days?"active":""} onClick={()=>setWindowDays(days)}>{days===7?"Semaine":days===30?"Mois":"Année"}</button>)}
+      <select aria-label="Année de rendement archivée" value={year??""} onChange={event=>setSelectedYear(Number(event.target.value))}>{years.map(item=><option key={item} value={item}>{item}</option>)}</select>
+    </div>
+    {points.length>0?<svg className="history-line-chart" viewBox="0 0 980 220" role="img" aria-label={"Historique des collectes du taux "+year+" pour "+title}>
+      <line x1="34" y1="42" x2="954" y2="42"/><line x1="34" y1="113" x2="954" y2="113"/><line x1="34" y1="184" x2="954" y2="184"/>
+      <path d={path}/><circle cx={coords[coords.length-1].x} cy={coords[coords.length-1].y} r="4"/>
+      <text x="34" y="207">{points[0].collectedDate}</text><text x="954" y="207" textAnchor="end">{last.collectedDate}</text>
+      <text x="34" y="28">{max.toLocaleString("fr-FR",{maximumFractionDigits:3})} %</text><text x="34" y="200">{min.toLocaleString("fr-FR",{maximumFractionDigits:3})} %</text>
+    </svg>:<div className="history-empty">Aucune collecte sur cette période. Élargis l'horizon ou attends les prochaines collectes quotidiennes.</div>}
+    <div className="history-chart-foot"><span>Source : {last?.sourceUrl?<a href={last.sourceUrl} target="_blank" rel="noreferrer">source du taux publié</a>:"non renseignée"}</span><span>Dernière collecte : {last?new Date(last.collectedAt).toLocaleString("fr-FR"):"n.c."}</span></div>
+    <p>{history.methodology??"Snapshots des taux annuels publiés, archivés à chaque collecte. Une ligne stable signifie que le taux annuel publié n'a pas changé ; ce graphique n'est pas un rendement quotidien du placement."}</p>
+  </section>;
+}
+
 function App() {
   const [page, setPage] = useState<Page>(() => { const candidate = window.location.hash.slice(1) as Page; return ["overview","etfs","assurance","portfolio","sources"].includes(candidate) ? candidate : "overview"; });
   const [search, setSearch] = useState("");
@@ -120,7 +153,7 @@ function App() {
   const [historyByIsin, setHistoryByIsin] = useState<Record<string,EuronextHistory>>({});
   const [historyLoadingIsin, setHistoryLoadingIsin] = useState<string|null>(null);
   const [historyOpenIsin, setHistoryOpenIsin] = useState<string|null>(null);
-  const [assuranceHistorySlug, setAssuranceHistorySlug] = useState<string|null>(null);
+  const [assuranceHistorySlug, setAssuranceHistorySlug] = useState<string|null>(null);\n  const [assuranceHistoryBySlug,setAssuranceHistoryBySlug]=useState<Record<string,AssuranceHistoryResponse>>({});\n  const [assuranceHistoryLoadingSlug,setAssuranceHistoryLoadingSlug]=useState<string|null>(null);
   const loadFx = async () => { setFxLoading(true); setFxError(null); try { const response = await fetch("/api/market/fx", {headers:{Accept:"application/json"}}); const data = await response.json(); if (!response.ok) throw new Error("Source BCE indisponible"); setFxData(data); } catch (error) { setFxError(error instanceof Error ? error.message : "Source BCE indisponible"); } finally { setFxLoading(false); } };
   useEffect(() => { void refreshAll(); }, []);
   useEffect(() => { localStorage.setItem("investpilot.manualEtfs", JSON.stringify(manualProducts)); }, [manualProducts]);
@@ -170,6 +203,20 @@ function App() {
     } catch (error) {
       setCatalogError(error instanceof Error ? error.message : "Erreur inconnue lors du chargement.");
     } finally { setLoading(false); }
+  };
+  const toggleAssuranceHistory = async (slug:string) => {
+    if (assuranceHistorySlug===slug) { setAssuranceHistorySlug(null); return; }
+    setAssuranceHistorySlug(slug);
+    if (assuranceHistoryBySlug[slug]) return;
+    setAssuranceHistoryLoadingSlug(slug);
+    try {
+      const response=await fetch("/api/assurance-vie/history?slug="+encodeURIComponent(slug),{headers:{Accept:"application/json"}});
+      const data=await response.json() as AssuranceHistoryResponse;
+      if (!response.ok || data.status!=="ok") throw new Error(data.message??"Historique D1 indisponible.");
+      setAssuranceHistoryBySlug(current=>({...current,[slug]:data}));
+    } catch(error) {
+      setAssuranceHistoryBySlug(current=>({...current,[slug]:{status:"unavailable",message:error instanceof Error?error.message:"Historique D1 indisponible."}}));
+    } finally { setAssuranceHistoryLoadingSlug(null); }
   };
   const loadAssuranceVie = async () => {
     setAssuranceLoading(true); setAssuranceError(null);
@@ -370,7 +417,7 @@ function App() {
                 const selected=contract.euroPerformance?.[assuranceSortPeriod];
                 const ranked=selected?.annualizedPct!==null && selected?.annualizedPct!==undefined;
                 return <div className="insurance-performance-row" key={contract.slug}>
-                  <span className="insurance-contract-cell"><b>{ranked?index+1:"—"}</b><strong>{contract.name}</strong><small>{contract.insurer??"Assureur non renseigné"}{contract.distributor?" · "+contract.distributor:""} · {contract.euroFund??"Fonds euros non référencé"}</small><small>{contract.etfCount??"n.c."} ETF · {contract.supportCount??"n.c."} supports · {contract.management??"Gestion non précisée"}</small><button className="text-button history-toggle" onClick={()=>setAssuranceHistorySlug(assuranceHistorySlug===contract.slug?null:contract.slug)}>{assuranceHistorySlug===contract.slug?"Masquer l’historique":"Historique annuel"}</button></span>
+                  <span className="insurance-contract-cell"><b>{ranked?index+1:"—"}</b><strong>{contract.name}</strong><small>{contract.insurer??"Assureur non renseigné"}{contract.distributor?" · "+contract.distributor:""} · {contract.euroFund??"Fonds euros non référencé"}</small><small>{contract.etfCount??"n.c."} ETF · {contract.supportCount??"n.c."} supports · {contract.management??"Gestion non précisée"}</small><button className="text-button history-toggle" onClick={()=>void toggleAssuranceHistory(contract.slug)}>{assuranceHistorySlug===contract.slug?"Masquer l’historique":"Historique annuel"}</button></span>
                   {(["1","3","5","8"] as AssuranceSortPeriod[]).map(period=>{
                     const result=contract.euroPerformance?.[period];
                     return <span className={assuranceSortPeriod===period?"sorted-period":""} key={period}>{result?.annualizedPct===null||result?.annualizedPct===undefined?"n.c.":<><strong>{result.annualizedPct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} % / an</strong><small>{result.cumulativePct===null?"":result.cumulativePct.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" % cumulés"}</small></>}</span>;
@@ -379,7 +426,7 @@ function App() {
               })}
               {filteredAssuranceContracts.length===0&&<div className="catalog-message">Aucun contrat ne correspond à cette recherche.</div>}
             </div>
-            {assuranceHistorySlug&&(()=>{const selected=filteredAssuranceContracts.find(contract=>contract.slug===assuranceHistorySlug);return selected?<AnnualRateChart title={selected.name+" · "+(selected.euroFund??"Fonds euros")} rates={selected.annualRates??[]} sourceUrl={selected.rateSourceUrl} checkedAt={selected.rateCheckedAt}/>:null;})()}
+            {assuranceHistorySlug&&(()=>{const selected=filteredAssuranceContracts.find(contract=>contract.slug===assuranceHistorySlug);return selected?<><AnnualRateChart title={selected.name+" · "+(selected.euroFund??"Fonds euros")} rates={selected.annualRates??[]} sourceUrl={selected.rateSourceUrl} checkedAt={selected.rateCheckedAt}/>{assuranceHistoryLoadingSlug===selected.slug?<div className="history-empty">Chargement des archives D1…</div>:assuranceHistoryBySlug[selected.slug]?<AssuranceSnapshotChart title={selected.name} history={assuranceHistoryBySlug[selected.slug]}/>:null}</>:null;})()}
           </section>
           <div className="catalog-summary"><strong>Frais et caractéristiques des contrats</strong><span className="muted small">Les données ETF et supports sont informatives, jamais un filtre</span></div>
           <div className="catalog-table-wrap insurance-table"><div className="insurance-table-head"><span>CONTRAT / ASSUREUR</span><span>FRAIS VERSEMENT</span><span>GESTION UC</span><span>GESTION €</span><span>ARBITRAGE</span><span>FONDS € 2025</span><span>ETF / SUPPORTS</span><span>MINIMUM</span></div>
