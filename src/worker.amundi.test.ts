@@ -1,41 +1,60 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./worker";
 
-const source = "https://www.amundietf.fr/fr/professionnels/produits-etf/recherche";
-const total = 654;
+const apiUrl = "https://www.amundietf.fr/mapi/ProductAPI/getProductsData";
 
-function productRow(index: number): string {
+function apiProduct(index: number, overrides: Record<string, unknown> = {}) {
   const isin = `LU${String(index + 1).padStart(10, "0")}`;
-  return "<tr>" +
-    `<td><a>ETF${index + 1} FP</a></td><td>WKN${index + 1}</td>` +
-    `<td>Amundi Test ETF ${index + 1} Code ISIN ${isin}</td>` +
-    "<td>EUR</td><td>0,10 %</td><td>100 M EUR</td><td>Article 6</td><td>1 contrat</td>" +
-    "<td>Monde</td><td>100,00 25/11/2026</td><td>1,00 %</td><td>2,00 %</td></tr>";
+  return {
+    productId: isin,
+    productType: "PRODUCT",
+    characteristics: {
+      ISIN: isin,
+      SHARE_MARKETING_NAME: `Amundi Test ETF ${index + 1}`,
+      MAIN_LISTINGS: { FRA: `ETF${index + 1} FP`, DEU: `ETF${index + 1} GY` },
+      WKN: `WKN${index + 1}`,
+      CURRENCY: "EUR",
+      TER: 0.18,
+      FUND_AUM_IN_EURO: 125000000,
+      FUND_SFDR_CLASSIFICATION: "Article 8",
+      ETF_CLASSIFICATION2: "MSCI World",
+      NAV: 123.45,
+      NAV_DATE_DISPLAYED: 1795651200000,
+      VISIBILITY_EXCEPTIONS: [],
+      ...overrides
+    },
+    metrics: [
+      { indicator: "PERFORMANCE", period: "YEAR_TO_DATE", value: 7.5 },
+      { indicator: "PERFORMANCE", period: "ONE_YEAR", value: 12.3 }
+    ],
+    currencies: { CURRENCY: "EUR" }
+  };
 }
 
-function cataloguePage(start: number, count: number, includeTotal = false): string {
-  const summary = includeTotal ? `<span>${total} produit(s)trouvé(s)</span>` : "";
-  return `<div>ETF_FINDER_SUMMARY ${summary}</div><table><tbody>${Array.from(
-    { length: count }, (_, offset) => productRow(start + offset)
-  ).join("")}</tbody></table>`;
+function apiResponse() {
+  const products = Array.from({ length: 655 }, (_, index) => apiProduct(index));
+  products[654].characteristics.VISIBILITY_EXCEPTIONS = [
+    { countryCode: "FRA", userProfileName: "INSTIT" }
+  ];
+  products.push({
+    ...apiProduct(655),
+    productType: "LIQUIDATED_PRODUCT"
+  });
+  return { products };
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Amundi catalogue Worker integration", () => {
-  it("fetches every numbered page and returns all 654 distinct ISINs", async () => {
-    const calls: string[] = [];
+  it("loads the official API and returns the 654 visible, distinct ETF ISINs", async () => {
+    let postedBody: any;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(String(input));
-      if (init?.method === "POST") return new Response(JSON.stringify({ products: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
-      calls.push(url.toString());
-      if (url.origin !== new URL(source).origin || url.pathname !== new URL(source).pathname) {
-        return new Response("unexpected upstream", { status: 404 });
-      }
-      const page = Number(url.searchParams.get("page") ?? "0");
-      const start = page * 50;
-      const count = Math.min(50, total - start);
-      return new Response(cataloguePage(start, count, page === 0), { status: 200 });
+      expect(String(input)).toBe(apiUrl);
+      expect(init?.method).toBe("POST");
+      postedBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify(apiResponse()), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      });
     }));
 
     const response = await worker.fetch(
@@ -43,42 +62,81 @@ describe("Amundi catalogue Worker integration", () => {
       { ASSETS: { fetch: async request => new Response(request.url) } }
     );
     const body = await response.json() as {
-      completeness: string; sourceTotal: number; productCount: number;
-      pageCount: number; products: Array<{ isin: string }>;
-      audit: { fetchedPages: number; failedPages: number; discoveredAdditionalPages: number };
+      status: string; completeness: string; sourceTotal: number; productCount: number;
+      pageCount: number; products: Array<{ isin: string; ticker: string; name: string; nav: string | null }>;
+      audit: { apiProductRecords: number; activeProductRecords: number; excludedByFranceInstitutionalVisibility: number };
     };
 
     expect(response.status).toBe(200);
-    expect(body.sourceTotal).toBe(total);
-    expect(body.productCount).toBe(total);
-    expect(body.products).toHaveLength(total);
-    expect(new Set(body.products.map(product => product.isin)).size).toBe(total);
+    expect(body.status).toBe("ok");
+    expect(body.sourceTotal).toBe(654);
+    expect(body.productCount).toBe(654);
+    expect(body.products).toHaveLength(654);
+    expect(new Set(body.products.map(product => product.isin)).size).toBe(654);
     expect(body.completeness).toBe("complete");
-    expect(body.pageCount).toBe(14);
-    expect(body.audit).toMatchObject({ fetchedPages: 14, failedPages: 0, discoveredAdditionalPages: 13 });
-    expect(calls).toHaveLength(14);
-    expect(calls.slice(1).map(url => new URL(url).searchParams.get("page"))).toEqual(
-      Array.from({ length: 13 }, (_, index) => String(index + 1))
-    );
+    expect(body.pageCount).toBe(1);
+    expect(body.audit).toMatchObject({
+      apiProductRecords: 656, activeProductRecords: 655,
+      excludedByFranceInstitutionalVisibility: 1
+    });
+    expect(body.products[0]).toMatchObject({
+      isin: "LU0000000001", ticker: "ETF1 FP", name: "Amundi Test ETF 1",
+      currency: "EUR", ongoingCharges: "0.18 %", sfdr: "Article 8",
+      exposure: "MSCI World", nav: "123.45", performanceYtd: "7.5", performance1y: "12.3"
+    });
+    expect(body.products.some(product => product.isin === "LU0000000655")).toBe(false);
+    expect(postedBody).toMatchObject({
+      productType: "ALL",
+      context: {
+        countryName: "France", countryCode: "FRA",
+        languageName: "French", languageCode: "fr", userProfileName: "INSTIT"
+      },
+      filters: [], sortCriterias: []
+    });
+    expect(postedBody.characteristics).toContain("ISIN");
+    expect(postedBody.characteristics).toContain("MAIN_LISTINGS");
+    expect(postedBody.metrics).toContainEqual({ indicator: "PERFORMANCE", period: "YEAR_TO_DATE" });
   });
 
-  it("marks the catalogue partial when Amundi repeats the first page for every pager URL", async () => {
-    const firstPage = cataloguePage(0, 50, true);
-    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === "POST"
-      ? new Response(JSON.stringify({ products: [] }), { status: 200, headers: { "Content-Type": "application/json" } })
-      : new Response(firstPage, { status: 200 })));
+  it("supports server-side search by name, ISIN, ticker, WKN and exposure", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      products: [apiProduct(0), apiProduct(1, { WKN: "SPECIALWKN", ETF_CLASSIFICATION2: "Nasdaq 100" })]
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    const response = await worker.fetch(
+      new Request("https://investpilot.test/api/catalog/amundi?q=specialwkn"),
+      { ASSETS: { fetch: async request => new Response(request.url) } }
+    );
+    const body = await response.json() as { products: Array<{ isin: string }> };
+    expect(body.products).toHaveLength(1);
+    expect(body.products[0].isin).toBe("LU0000000002");
+  });
+
+  it("refuses to call a partial or duplicated catalogue complete", async () => {
+    const duplicate = apiProduct(0);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      products: [apiProduct(0), duplicate]
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
 
     const response = await worker.fetch(
       new Request("https://investpilot.test/api/catalog/amundi"),
       { ASSETS: { fetch: async request => new Response(request.url) } }
     );
-    const body = await response.json() as {
-      completeness: string; productCount: number;
-      audit: { fetchedPages: number; failedPages: number };
-    };
-
+    const body = await response.json() as { status: string; completeness: string; audit: { duplicateIsinCount: number } };
+    expect(body.status).toBe("unparsed_source");
     expect(body.completeness).toBe("partial");
-    expect(body.productCount).toBe(50);
-    expect(body.audit).toMatchObject({ fetchedPages: 1, failedPages: 13 });
+    expect(body.audit.duplicateIsinCount).toBe(1);
+  });
+
+  it("returns no catalogue when the official API is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    const response = await worker.fetch(
+      new Request("https://investpilot.test/api/catalog/amundi"),
+      { ASSETS: { fetch: async request => new Response(request.url) } }
+    );
+    const body = await response.json() as { status: string; products: unknown[] };
+    expect(response.status).toBe(502);
+    expect(body.status).toBe("source_unavailable");
+    expect(body.products).toHaveLength(0);
   });
 });
