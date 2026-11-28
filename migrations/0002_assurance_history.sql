@@ -7,8 +7,9 @@ CREATE TABLE IF NOT EXISTS assurance_euro_rates (
   rate_pct REAL NOT NULL CHECK (rate_pct > -100 AND rate_pct < 1000),
   source_url TEXT NOT NULL,
   source_checked_at TEXT,
+  collected_date TEXT NOT NULL,
   collected_at TEXT NOT NULL,
-  UNIQUE (contract_slug, rate_year, source_url)
+  UNIQUE (contract_slug, rate_year, source_url, collected_date)
 );
 CREATE INDEX IF NOT EXISTS idx_assurance_euro_rates_contract_year
   ON assurance_euro_rates (contract_slug, rate_year);
