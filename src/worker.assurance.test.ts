@@ -22,7 +22,8 @@ describe("Assurance-vie performance rankings", () => {
     const euroHeaders = ["slug","contrat","type","fonds_euros",...years.map(year=>`taux_${year}_pct`),"url_source_principale","date_releve"];
     const ratesA = years.map(year => year >= 2018 ? (year === 2025 ? "3" : year === 2024 ? "2.5" : "2") : "");
     const euroCsv = csv(euroHeaders, [
-      ["av-avec-etf","Contrat avec ETF","assurance-vie","Fonds A",...ratesA,"https://example.test/euro-a","28/11/2026"]
+      ["av-avec-etf","Contrat avec ETF","assurance-vie","Fonds A",...ratesA,"https://example.test/euro-a","28/11/2026"],
+      ["av-euro-only","Z contrat euro seul","assurance-vie","Fonds Z",...ratesA,"https://example.test/euro-z","28/11/2026"]
     ]);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -38,8 +39,8 @@ describe("Assurance-vie performance rankings", () => {
 
     expect(response.status).toBe(200);
     expect(body.status).toBe("ok");
-    expect(body.contractCount).toBe(2);
-    expect(body.contracts.map((contract: any) => contract.slug)).toEqual(["av-avec-etf","av-sans-etf"]);
+    expect(body.contractCount).toBe(3);
+    expect(body.contracts.map((contract: any) => contract.slug)).toEqual(["av-avec-etf","av-sans-etf","av-euro-only"]);
     const withEtf = body.contracts.find((contract: any) => contract.slug === "av-avec-etf");
     const withoutEtf = body.contracts.find((contract: any) => contract.slug === "av-sans-etf");
     expect(withEtf.etfCount).toBe(20);
@@ -51,5 +52,9 @@ describe("Assurance-vie performance rankings", () => {
     expect(withoutEtf.etfCount).toBe(0);
     expect(withoutEtf.euroPerformance["1"].annualizedPct).toBeNull();
     expect(withoutEtf.euroPerformance["8"].annualizedPct).toBeNull();
+    const euroOnly = body.contracts.find((contract: any) => contract.slug === "av-euro-only");
+    expect(euroOnly.name).toBe("Z contrat euro seul");
+    expect(euroOnly.entryFeePct).toBeNull();
+    expect(euroOnly.euroPerformance["1"].annualizedPct).toBeCloseTo(3, 8);
   });
 });
