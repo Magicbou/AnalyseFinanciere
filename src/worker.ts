@@ -369,6 +369,17 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       return !/^[A-Z]{2}[A-Z0-9]{10}$/.test(isin);
     }).length;
     const duplicateIsinCount = mapped.length - uniqueProducts.length;
+    const performanceProbe = visibleProducts.find(product =>
+      asText(product.characteristics?.ISIN).toUpperCase() === "LU1135865084"
+    );
+    const performanceDiagnostics = performanceProbe ? {
+      productKeys: Object.keys(performanceProbe),
+      metrics: (performanceProbe as any).metrics ?? null,
+      performanceFields: Object.fromEntries(
+        Object.entries(performanceProbe.characteristics ?? {})
+          .filter(([key]) => /PERF|RETURN|PERFORMANCE/i.test(key))
+      )
+    } : null;
     const complete = uniqueProducts.length > 500
       && missingIsinCount === 0
       && duplicateIsinCount === 0
@@ -406,6 +417,7 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
           fiveYears: uniqueProducts.filter(product => product.performance5y !== null).length,
           tenYears: uniqueProducts.filter(product => product.performance10y !== null).length
         },
+        performanceDiagnostics,
         missingIsinCount,
         duplicateIsinCount,
         country: context.countryName,
