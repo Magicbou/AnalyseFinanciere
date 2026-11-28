@@ -473,7 +473,7 @@ async function getAssuranceVieContracts(): Promise<Response> {
       const euro: Record<string, string> = euroBySlug.get(slug) ?? {};
       return {
         slug,
-        name: row.contrat || euro.contrat || row.slug,
+        name: row.contrat || euro.contrat || slug,
         insurer: row.assureur || euro.assureur || null,
         distributor: row.courtier || euro.courtier || null,
         management: row.gestion || euro.gestion || null,
