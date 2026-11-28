@@ -249,6 +249,12 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
       pageCount: htmlPages.length,
       completeness: complete ? "complete" : "partial",
       audit: {
+        sourceHtmlLength: firstPage.length,
+        sourceMarkerFound: firstPage.includes("ETF_FINDER_SUMMARY"),
+        sourceHtmlTableRows: (firstPage.match(/<tr\\b/gi) ?? []).length,
+        sourceProductMentions: [...firstPage.matchAll(/.{0,100}(?:produit|trouv).{0,100}/gi)].slice(0, 8)
+          .map(match => match[0].replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 220)),
+        sourceFirstTableRow: firstPage.match(/<tr\\b[^>]*>[\\s\\S]*?<\\/tr>/i)?.[0].replace(/\\s+/g, " ").slice(0, 1200) ?? null,
         officialProductTotal: sourceTotal,
         uniqueIsinCount: productCount,
         parsedListingCount: rawRows.length,
