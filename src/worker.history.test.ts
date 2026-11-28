@@ -3,39 +3,51 @@ import worker from "./worker";
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("Euronext historical ETF prices", () => {
-  it("retrieves and parses adjusted daily history for an ISIN and Euronext market", async () => {
-    const today = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const previous = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+describe("ETF historical prices from Yahoo Finance", () => {
+  it("retrieves adjusted daily prices and calculates calendar-year returns", async () => {
     const currentYear = new Date().getUTCFullYear();
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const previous = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
     const priorYearEnd = (currentYear - 1) + "-12-31";
     const yearBeforeEnd = (currentYear - 2) + "-12-31";
-    const format = (value: string) => {
-      const [year, month, day] = value.split("-");
-      return day + "/" + month + "/" + year;
+    const dates = [yearBeforeEnd, priorYearEnd, previous, yesterday];
+    const payload = {
+      chart: {
+        error: null,
+        result: [{
+          meta: { currency: "EUR", exchangeName: "PAR", symbol: "CW8.PA" },
+          timestamp: dates.map(date => Date.parse(date + "T12:00:00Z") / 1000),
+          indicators: {
+            quote: [{
+              open: [89, 99.1, 100.5, 100.5],
+              high: [91, 101, 103, 103],
+              low: [88, 98.5, 100, 100],
+              close: [90, 100, 100.5, 102.34],
+              volume: [900, 1200, 2000, 2400]
+            }],
+            adjclose: [{ adjclose: [90, 100, 100.5, 102.34] }]
+          }
+        }]
+      }
     };
-    const html = [
-      "<table><thead><tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Last</th><th>Close</th><th>Number of shares</th></tr></thead>",
-      "<tbody><tr><td>" + format(yearBeforeEnd) + "</td><td>89.00</td><td>91.00</td><td>88.00</td><td>90.00</td><td>90.00</td><td>900</td></tr>",
-      "<tr><td>" + format(priorYearEnd) + "</td><td>99.10</td><td>101.00</td><td>98.50</td><td>100.00</td><td>100.00</td><td>1,200</td></tr>",
-      "<tr><td>" + format(previous) + "</td><td>100.50</td><td>103.00</td><td>100.00</td><td>100.50</td><td>100.50</td><td>2,000</td></tr>",
-      "<tr><td>" + format(today) + "</td><td>100.50</td><td>103.00</td><td>100.00</td><td>102.34</td><td>102.34</td><td>2,400</td></tr></tbody></table>"
-    ].join("");
-    const upstream = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.method).toBe("POST");
-      expect(String(init?.body)).toContain("adjusted=Y");
-      expect(String(init?.body)).toContain("nbSession=10");
-      return new Response(html, { status: 200, headers: { "Content-Type": "text/html" } });
+    const upstream = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain("query1.finance.yahoo.com/v8/finance/chart/CW8.PA");
+      expect(String(input)).toContain("range=10y");
+      expect(String(input)).toContain("interval=1d");
+      return new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } });
     });
     vi.stubGlobal("fetch", upstream);
 
     const response = await worker.fetch(new Request(
-      "https://investpilot.test/api/market/history?isin=LU1681043599&market=XPAR&from=" + yearBeforeEnd + "&to=" + today
+      "https://investpilot.test/api/market/history?isin=LU1681043599&ticker=CW8%20FP"
     ), { ASSETS: { fetch: async request => new Response(request.url) } });
     const body = await response.json() as any;
 
     expect(response.status).toBe(200);
     expect(body.status).toBe("ok");
+    expect(body.symbol).toBe("CW8.PA");
+    expect(body.adjusted).toBe(true);
+    expect(body.currency).toBe("EUR");
     expect(body.points).toHaveLength(4);
     expect(body.points[0].date).toBe(yearBeforeEnd);
     expect(body.points[3].close).toBe(102.34);
@@ -44,17 +56,18 @@ describe("Euronext historical ETF prices", () => {
     expect(body.annualReturns[0].returnPct).toBeCloseTo((100 / 90 - 1) * 100, 8);
     expect(body.annualReturns[1].period).toBe("year_to_date");
     expect(body.annualReturns[1].returnPct).toBeCloseTo(2.34, 8);
-    expect(body.methodology).toContain("deux ans");
     expect(upstream).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects unsupported markets before contacting Euronext", async () => {
+  it("does not invent a Yahoo symbol when the Amundi ticker suffix is unknown", async () => {
     const upstream = vi.fn();
     vi.stubGlobal("fetch", upstream);
     const response = await worker.fetch(new Request(
-      "https://investpilot.test/api/market/history?isin=LU1681043599&market=XETR"
+      "https://investpilot.test/api/market/history?isin=LU1681043599&ticker=UNKNOWN%20ZZ"
     ), { ASSETS: { fetch: async request => new Response(request.url) } });
-    expect(response.status).toBe(400);
+    const body = await response.json() as any;
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("unsupported_listing");
     expect(upstream).not.toHaveBeenCalled();
   });
 });
