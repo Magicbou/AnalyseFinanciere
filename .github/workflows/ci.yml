@@ -39,7 +39,7 @@ jobs:
             cat /tmp/investpilot-worker.log
             exit 1
           fi
-          node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("/tmp/investpilot-health.json","utf8")); if(data.status!=="ok" || data.version!=="0.5.2") { console.error(data); process.exit(1); }'
+          node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("/tmp/investpilot-health.json","utf8")); if(data.status!=="ok" || data.version!=="0.5.3") { console.error(data); process.exit(1); }'
           curl --silent --fail http://127.0.0.1:8788/ | grep -qi "InvestPilot"
           curl --silent --show-error --fail --max-time 45 http://127.0.0.1:8788/api/assurance-vie/contracts > /tmp/investpilot-assurance.json
           node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync("/tmp/investpilot-assurance.json","utf8")); const contract=data.contracts?.find(item=>item.slug==="linxea-spirit-2"); if(data.status!=="ok" || data.contractCount<10 || !contract || contract.entryFeePct!==0 || contract.ucManagementFeePct!==0.5 || !contract.euroPerformance?.["1"] || contract.euroPerformance["1"].annualizedPct===null) { console.error(data.message || data); process.exit(1); }'
