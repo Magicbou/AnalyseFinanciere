@@ -314,6 +314,12 @@ async function getAmundiCatalog(request: Request): Promise<Response> {
         navDate: formatDate(data.NAV_DATE_DISPLAYED),
         performanceYtd: performance("YEAR_TO_DATE"),
         performance1y: performance("ONE_YEAR"),
+        performance3y: performance("THREE_YEARS"),
+        performance5y: performance("FIVE_YEARS"),
+        performance10y: performance("TEN_YEARS"),
+        // Amundi publishes the SRRI on the product characteristics. Keep only
+        // the official 1–7 scale; missing or malformed values remain unavailable.
+        srri: /^[1-7]$/.test(asText(data.SRRI)) ? asText(data.SRRI) : null,
         sourceUrl: AMUNDI_SOURCE,
         sourceType: "amundi" as const
       }];
